@@ -714,7 +714,7 @@ static inline int MPII_Bine_mod(int a, int b)
     int r = a % b;
     return r < 0 ? r + b : r;
 }
-static inline int in_range(int x, uint32_t nbits) 
+static inline int MPII_Bine_in_range(int x, uint32_t nbits) 
 {
     return x >= smallest_negabinary[nbits] && x <= largest_negabinary[nbits];
 }
