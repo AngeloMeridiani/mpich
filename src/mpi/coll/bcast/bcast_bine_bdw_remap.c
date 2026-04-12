@@ -186,7 +186,6 @@ int MPIR_Bcast_bine_bdw_remap(void *buf, MPI_Aint count,
 
 fn_exit:
     MPIR_CHKLMEM_FREEALL();
-    printf("Eseguito MPIR_Bcast_bine_bdw_remap \n");
     return mpi_errno;
 fn_fail:
     goto fn_exit;
