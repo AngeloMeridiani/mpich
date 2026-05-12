@@ -402,6 +402,8 @@ void *MPII_Create_container(struct json_object *obj)
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Allgather_intra_recursive_doubling;
         else if (!strcmp(ckey, "algorithm=MPIR_Allgather_intra_ring"))
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Allgather_intra_ring;
+        else if (!strcmp(ckey, "algorithm=MPIR_Allgather_intra_bine"))
+            cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Allgather_intra_bine;
         else if (!strcmp(ckey, "algorithm=MPIR_Allgather_intra_recexch_doubling"))
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Allgather_intra_recexch_doubling;
         else if (!strcmp(ckey, "algorithm=MPIR_Allgather_intra_recexch_halving"))
@@ -506,6 +508,8 @@ void *MPII_Create_container(struct json_object *obj)
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_tree;
         else if (!strcmp(ckey, "algorithm=MPIR_Bcast_intra_pipelined_tree"))
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_pipelined_tree;
+        else if (!strcmp(ckey, "algorithm=MPIR_Bcast_intra_bine"))
+            cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_bine;
         else if (!strcmp(ckey, "algorithm=MPIR_Bcast_inter_remote_send_local_bcast"))
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_inter_remote_send_local_bcast;
         else if (!strcmp(ckey, "algorithm=MPIR_Bcast_allcomm_nb"))
@@ -846,6 +850,8 @@ void *MPII_Create_container(struct json_object *obj)
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Scan_allcomm_nb;
         else if (!strcmp(ckey, "algorithm=MPIR_Scatter_intra_binomial"))
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Scatter_intra_binomial;
+        else if (!strcmp(ckey, "algorithm=MPIR_Scatter_intra_bine"))
+            cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Scatter_intra_bine;
         else if (!strcmp(ckey, "algorithm=MPIR_Scatter_inter_linear"))
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Scatter_inter_linear;
         else if (!strcmp(ckey, "algorithm=MPIR_Scatter_inter_remote_send_local_scatter"))

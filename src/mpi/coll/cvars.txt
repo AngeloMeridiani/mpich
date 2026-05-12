@@ -192,6 +192,7 @@ cvars:
         scatter_ring_allgather                  - Force Scatter Ring
         pipelined_tree                          - Force tree-based pipelined algorithm
         tree                                    - Force tree-based algorithm
+        bine                                    - Force bine tree algorithm
 
     - name        : MPIR_CVAR_BCAST_CIRC_CHUNK_SIZE
       category    : COLLECTIVE
@@ -598,6 +599,7 @@ cvars:
         auto - Internal algorithm selection (can be overridden with MPIR_CVAR_COLL_SELECTION_TUNING_JSON_FILE)
         binomial - Force binomial algorithm
         nb       - Force nonblocking algorithm
+        bine     - Force bine tree algorithm
 
     - name        : MPIR_CVAR_SCATTER_INTER_ALGORITHM
       category    : COLLECTIVE
@@ -746,6 +748,7 @@ cvars:
         ring               - Force ring algorithm
         recexch_doubling   - Force recexch distance doubling algorithm
         recexch_halving    - Force recexch distance halving algorithm
+        bine               - Force bine tree algorithm
 
     - name        : MPIR_CVAR_ALLGATHER_BRUCKS_KVAL
       category    : COLLECTIVE
