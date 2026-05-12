@@ -1,3 +1,8 @@
+/*
+ * Copyright (C) by Argonne National Laboratory
+ *     See COPYRIGHT in top-level directory
+ */
+
 #include "mpiimpl.h"
 #include "mpir_bine.h"
 
@@ -6,9 +11,9 @@
  * halving Bine trees for broadcasting data from the root to the leaves.
  */
 
-int MPIR_Bcast_bine_lat_i(void *buf, MPI_Aint count,
-                          MPI_Datatype datatype, int root,
-                          MPIR_Comm *comm_ptr, int coll_attr)
+int MPIR_Bcast_intra_bine_lat_i(void *buf, MPI_Aint count,
+                                MPI_Datatype datatype, int root,
+                                MPIR_Comm *comm_ptr, int coll_attr)
 {
     int comm_size, rank, mpi_errno = MPI_SUCCESS, btnb_vrank;
     int vrank, mask, recvd, req_count = 0, steps;
@@ -24,15 +29,16 @@ int MPIR_Bcast_bine_lat_i(void *buf, MPI_Aint count,
     MPIR_COMM_RANK_SIZE(comm_ptr, rank, comm_size);
 
     MPIR_Datatype_get_size_macro(datatype, type_size);
-    if (HANDLE_IS_BUILTIN(datatype))
+    if (HANDLE_IS_BUILTIN(datatype)) {
         is_contig = 1;
-    else {
+    } else {
         MPIR_Datatype_is_contig(datatype, &is_contig);
     }
 
     nbytes = type_size * count;
-    if (nbytes == 0)
+    if (nbytes == 0) {
         goto fn_exit;
+    }
 
     if (!is_contig) {
         MPIR_CHKLMEM_MALLOC(tmp_buf, nbytes);
@@ -46,10 +52,10 @@ int MPIR_Bcast_bine_lat_i(void *buf, MPI_Aint count,
     MPIR_ERR_CHKANDJUMP(!MPL_is_pof2(comm_size), mpi_errno, MPI_ERR_COMM, "**comm");
 
     vrank = MPII_Bine_mod(rank - root, comm_size); /* MPII_Bine_mod computes math modulo rather than reminder */
-    steps = MPL_log2(comm_size);
+    steps = MPII_Bine_log2(comm_size);
     mask = 0x1 << (int)(steps - 1);
     recvd = (root == rank);
-    btnb_vrank = binary_to_negabinary(vrank);
+    btnb_vrank = MPII_Bine_binary_to_negabinary(vrank);
 
     MPIR_CHKLMEM_MALLOC(requests, steps * sizeof(MPIR_Request *));
 
@@ -64,19 +70,16 @@ int MPIR_Bcast_bine_lat_i(void *buf, MPI_Aint count,
             if (!is_contig) {
                 mpi_errno = MPIC_Isend(tmp_buf, nbytes, MPIR_BYTE_INTERNAL, partner,
                                        MPIR_BCAST_TAG, comm_ptr, &requests[req_count++], coll_attr);
-            }
-            else {
+            } else {
                 mpi_errno = MPIC_Isend(buf, count, datatype, partner,
                                        MPIR_BCAST_TAG, comm_ptr, &requests[req_count++], coll_attr);
             }
             MPIR_ERR_CHECK(mpi_errno);
-        }
-        else if (equal_lsbs) {
+        } else if (equal_lsbs) {
             if (!is_contig) {
                 mpi_errno = MPIC_Recv(tmp_buf, nbytes, MPIR_BYTE_INTERNAL,
                                       partner, MPIR_BCAST_TAG, comm_ptr, MPI_STATUS_IGNORE);
-            }
-            else {
+            } else {
                 mpi_errno = MPIC_Recv(buf, count, datatype,
                                       partner, MPIR_BCAST_TAG, comm_ptr, MPI_STATUS_IGNORE);
             }
@@ -97,9 +100,9 @@ int MPIR_Bcast_bine_lat_i(void *buf, MPI_Aint count,
         }
     }
 
-fn_exit:
+  fn_exit:
     MPIR_CHKLMEM_FREEALL();
     return mpi_errno;
-fn_fail:
+  fn_fail:
     goto fn_exit;
 }
