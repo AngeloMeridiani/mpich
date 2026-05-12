@@ -105,27 +105,34 @@ static int largest_negabinary[BINE_MAX_STEPS] = {
         }                                                                      \
     } while (0)
 
-static inline int pico_task_on_node() {
-    int current_tasks_per_node;
+static inline int MPII_Bine_pico_task_on_node(int *task_on_node) {
+    int mpi_errno = MPI_SUCCESS;
 
     char *tasks_per_node_env = getenv("CURRENT_TASKS_PER_NODE");
-    if (tasks_per_node_env == NULL) {
+    MPIR_ERR_CHKANDJUMP1((tasks_per_node_env == NULL), mpi_errno, MPI_ERR_COMM, 
+                         "**comm", "**comm %s", "Error: CURRENT_TASKS_PER_NODE environment variable is not set.");
+    /*if (tasks_per_node_env == NULL) {
         fprintf(
             stderr,
             "Error: CURRENT_TASKS_PER_NODE environment variable is not set.\n");
         return MPI_ERR_COMM;
-    }
-    current_tasks_per_node = atoi(tasks_per_node_env);
-    if (current_tasks_per_node <= 0) {
+    }*/
+    *task_on_node = atoi(tasks_per_node_env);
+    MPIR_ERR_CHKANDJUMP1((task_on_node <= 0), mpi_errno, MPI_ERR_COMM, 
+                         "**comm", "**comm %s", "Error: CURRENT_TASKS_PER_NODE must be a positive integer.");
+    /*if (current_tasks_per_node <= 0) {
         fprintf(stderr,
                 "Error: CURRENT_TASKS_PER_NODE must be a positive integer.\n");
         return MPI_ERR_COMM;
-    }
+    }*/
 
-    return current_tasks_per_node;
+fn_exit:
+    return mpi_errno;
+fn_fail:
+    goto fn_exit;
 }
 
-static inline void pico_get_group_config(int *node_size, int *node_rank,
+static inline void MPII_Bine_pico_get_group_config(int *node_size, int *node_rank,
                                          int *node_offset, int *local_rank,
                                          int task_on_node, int size, int rank) {
     *node_rank = rank / task_on_node;
@@ -136,10 +143,9 @@ static inline void pico_get_group_config(int *node_size, int *node_rank,
 
 #ifdef PICO_MPI_CUDA_AWARE
 
-static inline int
-copy_buffer_different_dt_cuda(const void *input_buffer, size_t scount,
-                              const MPI_Datatype sdtype, void *output_buffer,
-                              size_t rcount, const MPI_Datatype rdtype) 
+static inline int copy_buffer_different_dt_cuda(const void *input_buffer, MPI_Aint scount,
+                                                const MPI_Datatype sdtype, void *output_buffer,
+                                                MPI_Aint rcount, const MPI_Datatype rdtype) 
 {
     if (BINE_UNLIKELY(input_buffer == NULL || output_buffer == NULL ||
                       scount <= 0 || rcount <= 0)) {
@@ -151,8 +157,8 @@ copy_buffer_different_dt_cuda(const void *input_buffer, size_t scount,
     int rdtype_size;
     MPI_Type_size(rdtype, &rdtype_size);
 
-    size_t s_size = (size_t)sdtype_size * scount;
-    size_t r_size = (size_t)rdtype_size * rcount;
+    MPI_Aint s_size = (MPI_Aint)sdtype_size * scount;
+    MPI_Aint r_size = (MPI_Aint)rdtype_size * rcount;
 
     if (r_size < s_size) {
         BINE_CUDA_CHECK(cudaMemcpy(output_buffer, input_buffer, r_size,
@@ -183,7 +189,7 @@ copy_buffer_different_dt_cuda(const void *input_buffer, size_t scount,
  * @return The destination rank after applying the bine algorithm, a
  *         value in [0, comm_sz - 1].
  */
-static inline int pi(int rank, int step, int comm_sz) {
+static inline int MPII_Bine_pi(int rank, int step, int comm_sz) {
     int dest;
 
     if ((rank & 1) == 0)
@@ -197,7 +203,7 @@ static inline int pi(int rank, int step, int comm_sz) {
     return dest;
 }
 
-static inline void get_permutation_aux(int rank, int step, const int n_steps,
+static inline void MPII_Bine_get_permutation_aux(int rank, int step, const int n_steps,
                                        const int adj_size, int *bitmap,
                                        int offset) 
 {
@@ -208,24 +214,24 @@ static inline void get_permutation_aux(int rank, int step, const int n_steps,
     int peer;
 
     for (int s = step; s < n_steps; s++) {
-        peer = pi(rank, s, adj_size);
-        get_permutation_aux(peer, s + 1, n_steps, adj_size, bitmap,
+        peer = MPII_Bine_pi(rank, s, adj_size);
+        MPII_Bine_get_permutation_aux(peer, s + 1, n_steps, adj_size, bitmap,
                             offset + (1 << (n_steps - s - 1)));
     }
 }
 
-static inline void get_permutation(int rank, int step, const int n_steps,
+static inline void MPII_Bine_get_permutation(int rank, int step, const int n_steps,
                                    const int adj_size, int *bitmap,
                                    int offset) 
 {
     if (step >= n_steps)
         return;
 
-    int peer = pi(rank, step, adj_size);
-    get_permutation_aux(peer, step + 1, n_steps, adj_size, bitmap, offset);
+    int peer = MPII_Bine_pi(rank, step, adj_size);
+    MPII_Bine_get_permutation_aux(peer, step + 1, n_steps, adj_size, bitmap, offset);
 }
 
-static inline void get_indexes_aux(int rank, int step, const int n_steps,
+static inline void MPII_Bine_get_indexes_aux(int rank, int step, const int n_steps,
                                    const int adj_size, int *bitmap) 
 {
     if (step >= n_steps)
@@ -234,19 +240,19 @@ static inline void get_indexes_aux(int rank, int step, const int n_steps,
     int peer;
 
     for (int s = step; s < n_steps; s++) {
-        peer = pi(rank, s, adj_size);
+        peer = MPII_Bine_pi(rank, s, adj_size);
         *(bitmap + peer) = 0x1;
-        get_indexes_aux(peer, s + 1, n_steps, adj_size, bitmap);
+        MPII_Bine_get_indexes_aux(peer, s + 1, n_steps, adj_size, bitmap);
     }
 }
 
-static inline void get_indexes(int rank, int step, const int n_steps,
+static inline void MPII_Bine_get_indexes(int rank, int step, const int n_steps,
                                const int adj_size, int *bitmap) 
 {
     if (step >= n_steps)
         return;
 
-    int peer = pi(rank, step, adj_size);
+    int peer = MPII_Bine_pi(rank, step, adj_size);
     *(bitmap + peer) = 0x1;
     get_indexes_aux(peer, step + 1, n_steps, adj_size, bitmap);
 }
@@ -265,7 +271,7 @@ static inline void get_indexes(int rank, int step, const int n_steps,
  * @return MPI_SUCCESS on success, or MPI_ERR_UNKNOWN.
  */
 static inline int copy_buffer(const void *input_buffer, void *output_buffer,
-                              size_t count, const MPI_Datatype datatype) 
+                              MPI_Aint count, const MPI_Datatype datatype) 
 {
     if (BINE_UNLIKELY(input_buffer == NULL || output_buffer == NULL ||
                       count <= 0)) {
@@ -275,7 +281,7 @@ static inline int copy_buffer(const void *input_buffer, void *output_buffer,
     int datatype_size;
     MPI_Type_size(datatype, &datatype_size); // Get the size of the MPI datatype
 
-    size_t total_size = count * (size_t)datatype_size;
+    MPI_Aint total_size = count * (MPI_Aint)datatype_size;
 
     memcpy(output_buffer, input_buffer, total_size); // Perform the memory copy
 
@@ -297,9 +303,9 @@ static inline int copy_buffer(const void *input_buffer, void *output_buffer,
  * @return MPI_SUCCESS on success, or MPI_ERR.
  */
 static inline int copy_buffer_different_dt(const void *input_buffer,
-                                           size_t scount,
+                                           MPI_Aint scount,
                                            const MPI_Datatype sdtype,
-                                           void *output_buffer, size_t rcount,
+                                           void *output_buffer, MPI_Aint rcount,
                                            const MPI_Datatype rdtype) 
 {
     if (BINE_UNLIKELY(input_buffer == NULL || output_buffer == NULL ||
@@ -312,8 +318,8 @@ static inline int copy_buffer_different_dt(const void *input_buffer,
     int rdtype_size;
     MPI_Type_size(rdtype, &rdtype_size);
 
-    size_t s_size = (size_t)sdtype_size * scount;
-    size_t r_size = (size_t)rdtype_size * rcount;
+    MPI_Aint s_size = (MPI_Aint)sdtype_size * scount;
+    MPI_Aint r_size = (MPI_Aint)rdtype_size * rcount;
 
     if (r_size < s_size) {
         memcpy(output_buffer, input_buffer, r_size); // Copy as much as possible
@@ -339,7 +345,7 @@ static inline int copy_buffer_different_dt(const void *input_buffer,
  * @return The total memory span required for `count` repetitions of the
  * datatype.
  */
-static inline ptrdiff_t datatype_span(MPI_Datatype dtype, size_t count,
+static inline ptrdiff_t datatype_span(MPI_Datatype dtype, MPI_Aint count,
                                       ptrdiff_t *gap) 
 {
     if (count == 0) {
@@ -376,11 +382,12 @@ static inline int is_power_of_two(int value)
  *
  * @returns The log_2 of value or -1 for negative value.
  */
-static inline int log_2(int value) 
+static inline int MPII_Bine_log2(int value) 
 {
     if (BINE_UNLIKELY(1 > value)) {
         return -1;
     }
+    
     int log = sizeof(int) * 8 - 1 - __builtin_clz(value);
     if (!is_power_of_two(value)) {
         log += 1;
@@ -505,7 +512,7 @@ static inline void cleanup_reqs(request_manager_t *manager)
  * sum_counts: Returns sum of counts [lo, hi]
  *                  lo, hi in {0, 1, ..., nprocs_pof2 - 1}
  */
-static inline size_t sum_counts(const int counts[], ptrdiff_t *displs,
+static inline MPI_Aint sum_counts(const int counts[], ptrdiff_t *displs,
                                 int nprocs_rem, int lo, int hi) 
 {
     /* Adjust lo and hi for taking into account blocks of excluded processes */
@@ -540,7 +547,7 @@ static inline unsigned int mirror_perm(unsigned int x, int nbits)
  *
  * @return MPI_SUCCESS on success, or an error code.
  */
-static inline int reorder_blocks(void *buffer, size_t block_size,
+static inline int reorder_blocks(void *buffer, MPI_Aint block_size,
                                  int *block_permutation, int num_blocks) 
 {
     if (BINE_UNLIKELY(buffer == NULL || block_permutation == NULL ||
@@ -595,24 +602,25 @@ static inline int reorder_blocks(void *buffer, size_t block_size,
  *
  * @return MPI_SUCCESS on success, or an error code.
  */
-static inline int reorder_blocks_gpu(void *buffer, size_t block_size,
+static inline int MPII_Bine_reorder_blocks_gpu(void *buffer, MPI_Aint block_size,
                                      MPI_Datatype dtype, int *block_permutation,
                                      int num_blocks) 
 {
+    int mpi_errno = MPI_SUCCESS;
+    MPI_Aint ext;
+    char *buf = (char *)buffer;
+    void *temp;
+    
+    MPIR_ERR_CHKANDJUMP(BINE_UNLIKELY(buffer == NULL || block_permutation == NULL ||
+                      num_blocks <= 0), mpi_errno, MPI_ERR_COMM, "**comm");
     if (BINE_UNLIKELY(buffer == NULL || block_permutation == NULL ||
                       num_blocks <= 0)) {
         return MPI_ERR_ARG;
     }
 
-    int err = MPI_SUCCESS;
-    ptrdiff_t lb, ext;
-    char *buf = (char *)buffer;
-    void *temp;
 
-    err = MPI_Type_get_extent(dtype, &lb, &ext);
-    if (MPI_SUCCESS != err) {
-        return err;
-    }
+
+    MPIR_Datatype_get_extent_macro(dtype, ext);
 
 #ifdef PICO_MPI_CUDA_AWARE
     BINE_CUDA_CHECK(cudaMalloc(&temp, block_size * ext));
@@ -663,7 +671,11 @@ static inline int reorder_blocks_gpu(void *buffer, size_t block_size,
 #endif
     }
 
-    return MPI_SUCCESS;
+fn_exit:
+    return mpi_errno;
+fn_fail:
+    mpi_errno = MPI_ERR_NO_MEM;
+    goto fn_exit;
 }
 
 /**
@@ -686,11 +698,22 @@ static inline int get_sender(const int *p, int n, int i)
     return -1;
 }
 
+/*static inline int MPII_Bine_log2(int value) {
+  if(BINE_UNLIKELY(1 > value)) {
+    return -1;
+  }
+  int log = sizeof(int)*8 - 1 - __builtin_clz(value); 
+  if (!is_power_of_two(value)) {
+    log += 1;
+  }
+  return log;
+}*/
+
 /*
  * rounddown: Rounds a number down to nearest multiple.
  *     rounddown(10,4) = 8, rounddown(6,3) = 6, rounddown(14,3) = 12
  */
-static inline int rounddown(int num, int factor) 
+static inline int MPII_Bine_rounddown(int num, int factor) 
 {
     num /= factor;
     return num * factor; /* floor(num / factor) * factor */
@@ -719,7 +742,7 @@ static inline int MPII_Bine_in_range(int x, uint32_t nbits)
     return x >= smallest_negabinary[nbits] && x <= largest_negabinary[nbits];
 }
 
-static inline uint32_t reverse(uint32_t x) {
+static inline uint32_t MPII_Bine_reverse(uint32_t x) {
     x = ((x >> 1) & 0x55555555u) | ((x & 0x55555555u) << 1);
     x = ((x >> 2) & 0x33333333u) | ((x & 0x33333333u) << 2);
     x = ((x >> 4) & 0x0f0f0f0fu) | ((x & 0x0f0f0f0fu) << 4);
@@ -728,25 +751,30 @@ static inline uint32_t reverse(uint32_t x) {
     return x;
 }
 
-static inline uint32_t get_rank_negabinary_representation(uint32_t num_ranks,
-                                                          uint32_t rank) 
+static inline uint32_t MPII_Bine_get_rank_negabinary_representation(int num_ranks,
+                                                                    int rank) 
 {
-    binary_to_negabinary(rank);
+    MPII_Bine_binary_to_negabinary(rank);
     uint32_t nba = UINT32_MAX, nbb = UINT32_MAX;
-    size_t num_bits = log_2(num_ranks);
+
+    if (num_ranks == 1) {
+        return 0;
+    }
+
+    MPI_Aint num_bits = MPII_Bine_log2(num_ranks);
     if (rank % 2) {
-        if (in_range(rank, num_bits)) {
-            nba = binary_to_negabinary(rank);
+        if (MPII_Bine_in_range(rank, num_bits)) {
+            nba = MPII_Bine_binary_to_negabinary(rank);
         }
-        if (in_range(rank - num_ranks, num_bits)) {
-            nbb = binary_to_negabinary(rank - num_ranks);
+        if (MPII_Bine_in_range(rank - num_ranks, num_bits)) {
+            nbb = MPII_Bine_binary_to_negabinary(rank - num_ranks);
         }
     } else {
-        if (in_range(-rank, num_bits)) {
-            nba = binary_to_negabinary(-rank);
+        if (MPII_Bine_in_range(-rank, num_bits)) {
+            nba = MPII_Bine_binary_to_negabinary(-rank);
         }
-        if (in_range(-rank + num_ranks, num_bits)) {
-            nbb = binary_to_negabinary(-rank + num_ranks);
+        if (MPII_Bine_in_range(-rank + num_ranks, num_bits)) {
+            nbb = MPII_Bine_binary_to_negabinary(-rank + num_ranks);
         }
     }
 
@@ -765,34 +793,36 @@ static inline uint32_t get_rank_negabinary_representation(uint32_t num_ranks,
     }
 }
 
-static inline uint32_t MPII_Bine_remap_rank(uint32_t num_ranks, uint32_t rank) 
+static inline int MPII_Bine_remap_rank(int num_ranks, int rank) 
 {
-    uint32_t remap_rank = get_rank_negabinary_representation(num_ranks, rank);
+    if (num_ranks == 1) return 0;
+    uint32_t remap_rank = MPII_Bine_get_rank_negabinary_representation(num_ranks, rank);
     remap_rank = remap_rank ^ (remap_rank >> 1);
-    size_t num_bits = log_2(num_ranks);
-    remap_rank = reverse(remap_rank) >> (32 - num_bits);
+    int num_bits = MPII_Bine_log2(num_ranks);
+    remap_rank = MPII_Bine_reverse(remap_rank) >> (32 - num_bits);
     return remap_rank;
 }
 
-static inline uint32_t MPII_Bine_inverse_rank(uint32_t num_ranks, uint32_t rank) 
+static inline int MPII_Bine_inverse_rank(int num_ranks, int rank) 
 {
-    size_t num_bits = log_2(num_ranks);
-    return reverse(rank) >> (32 - num_bits);
+    if (num_ranks == 1) return 0;
+    int num_bits = MPII_Bine_log2(num_ranks);
+    return MPII_Bine_reverse(rank) >> (32 - num_bits);
 }
 
-static inline uint32_t get_sender_aux(uint32_t num_ranks, uint32_t rank,
-                                      uint32_t root) 
+static inline int MPII_Bine_get_sender_aux(int num_ranks, int rank,
+                                      int root) 
 {
-    uint32_t remap = remap_rank(num_ranks, rank);
+    int remap = MPII_Bine_remap_rank(num_ranks, rank);
 
     if (remap == root)
         return rank;
     else
-        return get_sender_aux(num_ranks, remap, root);
+        return MPII_Bine_get_sender_aux(num_ranks, remap, root);
 }
 
-static inline uint32_t get_sender_rec(uint32_t num_ranks, uint32_t rank) {
-    return get_sender_aux(num_ranks, rank, rank);
+static inline int MPII_Bine_get_sender_rec(int num_ranks, int rank) {
+    return MPII_Bine_get_sender_aux(num_ranks, rank, rank);
 }
 
 // Function to calculate a Mersenne number (2^n - 1)
@@ -801,12 +831,20 @@ static inline uint32_t mersenne(int n)
     return (1UL << (n + 1)) - 1; 
 }
 
-static inline int remap_distance_doubling(uint32_t num) 
+static inline int MPII_Bine_remap_distance_doubling(uint32_t num) 
 {
     int remapped = 0;
     while (num > 0) {
-        int k =
-            31 - __builtin_clz(num); // Find the position of the highest set bit
+        int k = -1;
+#ifdef MPL_HAVE_BUILTIN_CLZ
+        k = 31 - __builtin_clz(num); // Find the position of the highest set bit
+#else 
+        int n = num;
+        while (n > 0) {
+            n >>= 1;
+            k++;
+        }
+#endif
         remapped ^= (0x1 << k);      // Set the k-th bit in the remapped number
         num ^= mersenne(k); // XOR the Mersenne number with the remaining number
     }
@@ -815,37 +853,37 @@ static inline int remap_distance_doubling(uint32_t num)
 
 static inline uint32_t MPII_Bine_nb_to_nu(uint32_t nb, uint32_t size) 
 {
-    return reverse(nb ^ (nb >> 1)) >> (32 - log_2(size));
+    return MPII_Bine_reverse(nb ^ (nb >> 1)) >> (32 - MPII_Bine_log2(size));
 }
 
-static inline uint32_t get_nu(uint32_t rank, uint32_t size) 
+static inline uint32_t MPII_Bine_get_nu(uint32_t rank, uint32_t size) 
 {
     uint32_t nba = UINT32_MAX, nbb = UINT32_MAX;
-    size_t num_bits = log_2(size);
+    MPI_Aint num_bits = MPII_Bine_log2(size);
     if (rank % 2) {
-        if (in_range(rank, num_bits)) {
-            nba = binary_to_negabinary(rank);
+        if (MPII_Bine_in_range(rank, num_bits)) {
+            nba = MPII_Bine_binary_to_negabinary(rank);
         }
-        if (in_range(rank - size, num_bits)) {
-            nbb = binary_to_negabinary(rank - size);
+        if (MPII_Bine_in_range(rank - size, num_bits)) {
+            nbb = MPII_Bine_binary_to_negabinary(rank - size);
         }
     } else {
-        if (in_range(-rank, num_bits)) {
-            nba = binary_to_negabinary(-rank);
+        if (MPII_Bine_in_range(-rank, num_bits)) {
+            nba = MPII_Bine_binary_to_negabinary(-rank);
         }
-        if (in_range(-rank + size, num_bits)) {
-            nbb = binary_to_negabinary(-rank + size);
+        if (MPII_Bine_in_range(-rank + size, num_bits)) {
+            nbb = MPII_Bine_binary_to_negabinary(-rank + size);
         }
     }
-    assert(nba != UINT32_MAX || nbb != UINT32_MAX);
+    MPIR_Assert(nba != UINT32_MAX || nbb != UINT32_MAX);
 
     if (nba == UINT32_MAX && nbb != UINT32_MAX) {
-        return nb_to_nu(nbb, size);
+        return MPII_Bine_nb_to_nu(nbb, size);
     } else if (nba != UINT32_MAX && nbb == UINT32_MAX) {
-        return nb_to_nu(nba, size);
+        return MPII_Bine_nb_to_nu(nba, size);
     } else { // Check MSB
-        int nu_a = nb_to_nu(nba, size);
-        int nu_b = nb_to_nu(nbb, size);
+        int nu_a = MPII_Bine_nb_to_nu(nba, size);
+        int nu_b = MPII_Bine_nb_to_nu(nbb, size);
         if (nu_a < nu_b) {
             return nu_a;
         } else {
@@ -855,7 +893,7 @@ static inline uint32_t get_nu(uint32_t rank, uint32_t size)
 }
 
 // return the amount of extra data to be shered
-static inline int remining_data_to_share(int remainig_node, int node_rank,
+static inline int MPII_Bine_remining_data_to_share(int remainig_node, int node_rank,
                                          int comm_dist) 
 {
     int shared_size = remainig_node - node_rank;
@@ -866,7 +904,7 @@ static inline int remining_data_to_share(int remainig_node, int node_rank,
 }
 
 // round the number to the smaller nearest power of tow
-static inline unsigned int floor_power_of_two(unsigned int n) 
+static inline unsigned int MPII_Bine_floor_power_of_two(unsigned int n) 
 {
     if (n == 0)
         return 0;
