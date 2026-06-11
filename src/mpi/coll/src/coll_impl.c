@@ -106,6 +106,8 @@ MPIR_Tree_type_t MPIR_Allreduce_tree_type = MPIR_TREE_TYPE_KARY;
 MPIR_Tree_type_t MPIR_Ibcast_tree_type = MPIR_TREE_TYPE_KARY;
 MPIR_Tree_type_t MPIR_Bcast_tree_type = MPIR_TREE_TYPE_KARY;
 MPIR_Tree_type_t MPIR_Ireduce_tree_type = MPIR_TREE_TYPE_KARY;
+MPIR_Bine_type_t MPIR_Allgather_bine_type = MPIR_BINE_TYPE_PERMUTE;
+MPIR_Bine_type_t MPIR_Reduce_scatter_bine_type = MPIR_BINE_TYPE_PERMUTE;
 void *MPIR_Csel_root = NULL;
 const char *MPIR_Csel_source;
 
@@ -143,6 +145,22 @@ static MPIR_Tree_type_t get_tree_type_from_string_with_topo(const char *tree_str
     return tree_type;
 }
 
+MPIR_Bine_type_t get_bine_type_from_string(const char *bine_str) 
+{
+    MPIR_Bine_type_t bine_type = MPIR_BINE_TYPE_PERMUTE;
+    if (0 == strcmp(bine_str, "permute"))
+        bine_type = MPIR_BINE_TYPE_PERMUTE;
+    else if (0 == strcmp(bine_str, "send_remap"))
+        bine_type = MPIR_BINE_TYPE_SEND_REMAP;
+    else if (0 == strcmp(bine_str, "block_by_block"))
+        bine_type = MPIR_BINE_TYPE_BLOCK_BY_BLOCK;
+    else if (0 == strcmp(bine_str, "two_blocks"))
+        bine_type = MPIR_BINE_TYPE_TWO_BLOCKS;
+    else 
+        bine_type = MPIR_BINE_TYPE_PERMUTE;
+    return bine_type;
+}
+
 int get_ccl_from_string(const char *ccl_str)
 {
     int ccl = -1;
@@ -173,6 +191,12 @@ int MPII_Coll_init(void)
 
     /* Ireduce */
     MPIR_Ireduce_tree_type = get_tree_type_from_string_with_topo(MPIR_CVAR_IREDUCE_TREE_TYPE);
+
+    /* Allgather */
+    MPIR_Allgather_bine_type = get_bine_type_from_string(MPIR_CVAR_ALLGATHER_BINE_TYPE);
+
+    /* Reduce_scatter */
+    MPIR_Reduce_scatter_bine_type = get_bine_type_from_string(MPIR_CVAR_REDUCE_SCATTER_BINE_TYPE);
 
     /* register non blocking collectives progress hook */
     mpi_errno = MPIR_Progress_hook_register(-1, MPIDU_Sched_progress, &MPIR_Nbc_progress_hook_id);

@@ -77,8 +77,9 @@ bcast-intra:
     pipelined_tree
         extra_params: tree_type, k, is_non_blocking, chunk_size, recv_pre_posted
         cvar_params: TREE_TYPE, TREE_KVAL, IS_NON_BLOCKING, TREE_PIPELINE_CHUNK_SIZE, RECV_PRE_POST 
-    bine
-        restrictions: power-of-two
+    bine_lat
+    bine_bdw_remap
+
 ibcast-intra:
     sched_binomial
     sched_smp
@@ -185,6 +186,8 @@ allgather-intra:
         extra_params: recexch_type=MPIR_ALLGATHER_RECEXCH_TYPE_DISTANCE_HALVING, k, single_phase_recv
         cvar_params: -, RECEXCH_KVAL, RECEXCH_SINGLE_PHASE_RECV
     bine
+        extra_params: bine_type
+        cvar_params: BINE_TYPE
         restrictions: power-of-two
 allgather-inter:
     local_gather_remote_bcast
@@ -402,6 +405,10 @@ reduce_scatter-intra:
         restrictions: commutative
     recursive_doubling
     recursive_halving
+        restrictions: commutative
+    bine
+        extra_params: bine_type
+        cvar_params: BINE_TYPE
         restrictions: commutative
 reduce_scatter-inter:
     remote_reduce_local_scatter

@@ -41,11 +41,14 @@ extern MPIR_Tree_type_t MPIR_Allreduce_tree_type;
 extern MPIR_Tree_type_t MPIR_Ireduce_tree_type;
 extern MPIR_Tree_type_t MPIR_Ibcast_tree_type;
 extern MPIR_Tree_type_t MPIR_Bcast_tree_type;
+extern MPIR_Bine_type_t MPIR_Allgather_bine_type;
+extern MPIR_Bine_type_t MPIR_Reduce_scatter_bine_type;
 extern void *MPIR_Csel_root;
 extern const char *MPIR_Csel_source;
 extern char MPII_coll_generic_json[];
 
 MPIR_Tree_type_t get_tree_type_from_string(const char *tree_str);
+MPIR_Bine_type_t get_bine_type_from_string(const char *bine_str);
 int get_ccl_from_string(const char *ccl_str);
 
 /* Function to initialize communicators for collectives */

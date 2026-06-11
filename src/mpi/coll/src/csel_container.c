@@ -347,6 +347,18 @@ static void parse_container_params(struct json_object *obj, MPII_Csel_container_
                 }
             }
             break;
+        
+        case MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Allgather_intra_bine:
+            {
+                json_object_object_foreach(obj, key, val) {
+                    ckey = MPL_strdup_no_spaces(key);
+                    if (!strncmp(ckey, "bine_type=", strlen("bine_type=")))
+                        cnt->u.allgather.intra_bine.bine_type =
+                            get_bine_type_from_string(ckey + strlen("bine_type="));
+                    MPL_free(ckey);
+                }
+            }
+            break;    
 
         case MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Alltoall_intra_k_brucks:
             {
@@ -376,6 +388,18 @@ static void parse_container_params(struct json_object *obj, MPII_Csel_container_
                     ckey = MPL_strdup_no_spaces(key);
                     if (!strncmp(ckey, "k=", strlen("k=")))
                         cnt->u.barrier.intra_recexch.k = atoi(ckey + strlen("k="));
+                    MPL_free(ckey);
+                }
+            }
+            break;
+        
+        case MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Reduce_scatter_intra_bine:
+            {
+                json_object_object_foreach(obj, key, val) {
+                    ckey = MPL_strdup_no_spaces(key);
+                    if (!strncmp(ckey, "bine_type=", strlen("bine_type=")))
+                        cnt->u.reduce_scatter.intra_bine.bine_type =
+                            get_bine_type_from_string(ckey + strlen("bine_type="));
                     MPL_free(ckey);
                 }
             }
@@ -508,8 +532,10 @@ void *MPII_Create_container(struct json_object *obj)
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_tree;
         else if (!strcmp(ckey, "algorithm=MPIR_Bcast_intra_pipelined_tree"))
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_pipelined_tree;
-        else if (!strcmp(ckey, "algorithm=MPIR_Bcast_intra_bine"))
-            cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_bine;
+        else if (!strcmp(ckey, "algorithm=MPIR_Bcast_intra_bine_lat"))
+            cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_bine_lat;
+        else if (!strcmp(ckey, "algorithm=MPIR_Bcast_intra_bine_bdw_remap"))
+            cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_intra_bine_bdw_remap;
         else if (!strcmp(ckey, "algorithm=MPIR_Bcast_inter_remote_send_local_bcast"))
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Bcast_inter_remote_send_local_bcast;
         else if (!strcmp(ckey, "algorithm=MPIR_Bcast_allcomm_nb"))
@@ -820,6 +846,8 @@ void *MPII_Create_container(struct json_object *obj)
         else if (!strcmp(ckey, "algorithm=MPIR_Reduce_scatter_intra_recursive_halving"))
             cnt->id =
                 MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Reduce_scatter_intra_recursive_halving;
+        else if (!strcmp(ckey, "algorithm=MPIR_Reduce_scatter_intra_bine"))
+            cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Reduce_scatter_intra_bine;
         else if (!strcmp(ckey, "algorithm=MPIR_Reduce_scatter_inter_remote_reduce_local_scatter"))
             cnt->id =
                 MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Reduce_scatter_inter_remote_reduce_local_scatter;
