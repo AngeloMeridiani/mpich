@@ -39,9 +39,7 @@ int MPIR_Scatter_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Datatyp
         MPIR_Datatype_get_extent_macro(sendtype, stext);
     }
 
-    //vrank = (rank >= root) ? rank - root : rank - root + comm_size;
     vrank = MPII_Bine_mod(rank - root, comm_size);      /* MPII_Bine_mod computes math modulo rather than reminder */
-    /* Potrebbe essere un'alternativa più veloce:  vrank = (rank >= root) ? rank - root : rank - root + comm_size; */
 
     if (rank == root) {
         /* We separate the two cases (root and non-root) because
