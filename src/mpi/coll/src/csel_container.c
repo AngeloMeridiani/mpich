@@ -485,6 +485,8 @@ void *MPII_Create_container(struct json_object *obj)
                 MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Alltoall_intra_pairwise_sendrecv_replace;
         else if (!strcmp(ckey, "algorithm=MPIR_Alltoall_intra_scattered"))
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Alltoall_intra_scattered;
+        else if (!strcmp(ckey, "algorithm=MPIR_Alltoall_intra_bine"))
+            cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Alltoall_intra_bine;
         else if (!strcmp(ckey, "algorithm=MPIR_Alltoall_inter_pairwise_exchange"))
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Alltoall_inter_pairwise_exchange;
         else if (!strcmp(ckey, "algorithm=MPIR_Alltoall_allcomm_nb"))
@@ -546,6 +548,8 @@ void *MPII_Create_container(struct json_object *obj)
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Exscan_allcomm_nb;
         else if (!strcmp(ckey, "algorithm=MPIR_Gather_intra_binomial"))
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Gather_intra_binomial;
+        else if (!strcmp(ckey, "algorithm=MPIR_Gather_intra_bine"))
+            cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Gather_intra_bine;
         else if (!strcmp(ckey, "algorithm=MPIR_Gather_inter_linear"))
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Gather_inter_linear;
         else if (!strcmp(ckey, "algorithm=MPIR_Gather_inter_local_gather_remote_send"))
@@ -831,6 +835,10 @@ void *MPII_Create_container(struct json_object *obj)
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Reduce_intra_reduce_scatter_gather;
         else if (!strcmp(ckey, "algorithm=MPIR_Reduce_intra_smp"))
             cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Reduce_intra_smp;
+        else if (!strcmp(ckey, "algorithm=MPIR_Reduce_intra_bine_lat"))
+            cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Reduce_intra_bine_lat;
+        else if (!strcmp(ckey, "algorithm=MPIR_Reduce_intra_bine_bdw"))
+            cnt->id = MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Reduce_intra_bine_bdw;
         else if (!strcmp(ckey, "algorithm=MPIR_Reduce_inter_local_reduce_remote_send"))
             cnt->id =
                 MPII_CSEL_CONTAINER_TYPE__ALGORITHM__MPIR_Reduce_inter_local_reduce_remote_send;

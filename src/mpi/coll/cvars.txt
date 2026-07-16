@@ -470,6 +470,7 @@ cvars:
         auto - Internal algorithm selection (can be overridden with MPIR_CVAR_COLL_SELECTION_TUNING_JSON_FILE)
         binomial - Force binomial algorithm
         nb       - Force nonblocking algorithm
+        bine     - Force bine algorithm
 
     - name        : MPIR_CVAR_GATHER_INTER_ALGORITHM
       category    : COLLECTIVE
@@ -1005,6 +1006,7 @@ cvars:
         pairwise                  - Force pairwise algorithm
         pairwise_sendrecv_replace - Force pairwise sendrecv replace algorithm
         scattered                 - Force scattered algorithm
+        bine                      - Force bine algorithm
 
     - name        : MPIR_CVAR_ALLTOALL_BRUCKS_KVAL
       category    : COLLECTIVE
@@ -1220,6 +1222,8 @@ cvars:
         nb                    - Force nonblocking algorithm
         smp                   - Force smp algorithm
         reduce_scatter_gather - Force reduce scatter gather algorithm
+        bine_lat              - Force bine latency algorithm
+        bine_bdw              - Force bine bandwidth algorithm
 
     - name        : MPIR_CVAR_REDUCE_INTER_ALGORITHM
       category    : COLLECTIVE

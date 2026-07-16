@@ -108,6 +108,7 @@ ibcast-inter:
 
 gather-intra:
     binomial
+    bine
 gather-inter:
     linear
     local_gather_remote_send
@@ -253,6 +254,7 @@ alltoall-intra:
         restrictions: inplace
     scattered
         restrictions: noinplace
+    bine
 alltoall-inter:
     pairwise_exchange
 ialltoall-intra:
@@ -326,6 +328,8 @@ reduce-intra:
         restrictions: commutative, parent-comm
     reduce_scatter_gather
         restrictions: size-ge-pof2, builtin-op
+    bine_lat
+    bine_bdw
 reduce-inter:
     local_reduce_remote_send
 ireduce-intra:
