@@ -25,7 +25,7 @@ static inline int MPIR_Allgather_intra_bine_permute(const void *sendbuf, MPI_Ain
     /*
      * Current implementation only handles power-of-two number of processes.
      */
-    steps = MPII_Bine_log2(comm_size);
+    steps = MPL_log2(comm_size);
     MPIR_ERR_CHKANDJUMP(!MPL_is_pof2(comm_size), mpi_errno, MPI_ERR_COMM, "**comm");
 
     MPIR_Datatype_get_extent_macro(recvtype, rext);
@@ -55,7 +55,7 @@ static inline int MPIR_Allgather_intra_bine_permute(const void *sendbuf, MPI_Ain
 
         MPII_Bine_get_permutation(rank, step, steps, comm_size, permutation, data_exchange);
 
-        tmprecv = (char *) tmp_buf + (MPI_Aint) data_exchange *(MPI_Aint) recvcount *rsize;
+        tmprecv = (char *) tmp_buf + (MPI_Aint) data_exchange *(MPI_Aint) recvcount * rsize;
 
         mpi_errno =
             MPIC_Sendrecv(tmp_buf, data_exchange * recvcount * rsize, MPIR_BYTE_INTERNAL, remote,
@@ -102,7 +102,7 @@ static inline int MPIR_Allgather_intra_bine_block_by_block(const void *sendbuf, 
     /*
      * Current implementation only handles power-of-two number of processes.
      */
-    steps = MPII_Bine_log2(comm_size);
+    steps = MPL_log2(comm_size);
     MPIR_ERR_CHKANDJUMP(!MPL_is_pof2(comm_size), mpi_errno, MPI_ERR_COMM, "**comm");
 
     MPIR_Datatype_get_extent_macro(recvtype, rext);
@@ -189,7 +189,7 @@ static inline int MPIR_Allgather_intra_bine_send_remap(const void *sendbuf, MPI_
     /*
      * Current implementation only handles power-of-two number of processes.
      */
-    steps = MPII_Bine_log2(comm_size);
+    steps = MPL_log2(comm_size);
     MPIR_ERR_CHKANDJUMP(!MPL_is_pof2(comm_size), mpi_errno, MPI_ERR_COMM, "**comm");
 
     MPIR_Datatype_get_extent_macro(recvtype, rext);
@@ -212,7 +212,7 @@ static inline int MPIR_Allgather_intra_bine_send_remap(const void *sendbuf, MPI_
                               tmprecv, recvcount * rsize, MPIR_BYTE_INTERNAL, vrank,
                               MPIR_ALLGATHER_TAG, comm_ptr, MPI_STATUS_IGNORE, coll_attr);
         } else {
-            tmpsend = (char *) recvbuf + (MPI_Aint) rank *(MPI_Aint) recvcount *rext;
+            tmpsend = (char *) recvbuf + (MPI_Aint) rank * (MPI_Aint) recvcount * rext;
             mpi_errno =
                 MPIC_Sendrecv(tmpsend, recvcount, recvtype,
                               MPII_Bine_get_sender_rec(comm_size, rank), MPIR_ALLGATHER_TAG,
@@ -256,7 +256,6 @@ static inline int MPIR_Allgather_intra_bine_send_remap(const void *sendbuf, MPI_
             send_block_location -= distance;
         }
 
-        /* Sendreceive */
         mpi_errno =
             MPIC_Sendrecv(tmpsend, step_scount * rsize, MPIR_BYTE_INTERNAL, remote,
                           MPIR_ALLGATHER_TAG, tmprecv, step_scount * rsize, MPIR_BYTE_INTERNAL,
@@ -278,9 +277,9 @@ static inline int MPIR_Allgather_intra_bine_send_remap(const void *sendbuf, MPI_
 }
 
 static inline int MPIR_Allgather_intra_bine_two_blocks(const void *sendbuf, MPI_Aint sendcount,
-                                                     MPI_Datatype sendtype, void *recvbuf,
-                                                     MPI_Aint recvcount, MPI_Datatype recvtype,
-                                                     MPIR_Comm *comm_ptr, int coll_attr)
+                                                       MPI_Datatype sendtype, void *recvbuf,
+                                                       MPI_Aint recvcount, MPI_Datatype recvtype,
+                                                       MPIR_Comm *comm_ptr, int coll_attr)
 {
 
     int rank, comm_size, steps, mpi_errno = MPI_SUCCESS, remote;
@@ -298,7 +297,7 @@ static inline int MPIR_Allgather_intra_bine_two_blocks(const void *sendbuf, MPI_
     /*
      * Current implementation only handles power-of-two number of processes.
      */
-    steps = MPII_Bine_log2(comm_size);
+    steps = MPL_log2(comm_size);
     MPIR_ERR_CHKANDJUMP(!MPL_is_pof2(comm_size), mpi_errno, MPI_ERR_COMM, "**comm");
 
     MPIR_Datatype_get_extent_macro(recvtype, rext);
@@ -344,9 +343,9 @@ static inline int MPIR_Allgather_intra_bine_two_blocks(const void *sendbuf, MPI_
          * direction.
          */
         if ((step & 1) == (rank & 1)) {
-            recv_index = (send_index + mask + comm_size) % comm_size;
+            recv_index = MPII_Bine_mod((send_index + mask + comm_size), comm_size);
         } else {
-            recv_index = (send_index - mask + comm_size) % comm_size;
+            recv_index = MPII_Bine_mod((send_index - mask + comm_size), comm_size);
             my_first = recv_index;
         }
 
@@ -375,8 +374,8 @@ static inline int MPIR_Allgather_intra_bine_two_blocks(const void *sendbuf, MPI_
             MPIR_ERR_CHECK(mpi_errno);
         }
         /* Simple case: no wrap-around */
-        tmpsend = (char *) tmp_buf + (MPI_Aint) send_index *(MPI_Aint) recvcount *rsize;
-        tmprecv = (char *) tmp_buf + (MPI_Aint) recv_index *(MPI_Aint) recvcount *rsize;
+        tmpsend = (char *) tmp_buf + (MPI_Aint) send_index * (MPI_Aint) recvcount * rsize;
+        tmprecv = (char *) tmp_buf + (MPI_Aint) recv_index * (MPI_Aint) recvcount * rsize;
 
         mpi_errno =
             MPIC_Sendrecv(tmpsend, (MPI_Aint) send_count * recvcount * rsize, MPIR_BYTE_INTERNAL,

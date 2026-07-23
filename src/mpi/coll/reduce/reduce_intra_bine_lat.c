@@ -16,19 +16,29 @@ int MPIR_Reduce_intra_bine_lat(const void *sendbuf,
     int comm_size, rank, dtsize, vrank, mask, mpi_errno = MPI_SUCCESS;
     int partner, btnb_vrank, mask_lsbs, lsbs, equal_lsbs;
     MPI_Aint true_lb, true_extent, extent;
+    const void *send_ptr = NULL;
     char *tmpbuf = NULL;
     MPI_Aint buf_size;
     MPIR_CHKLMEM_DECL();
 
-    MPIR_Assert(MPIR_Op_is_commutative(op));
-
-    MPIR_COMM_RANK_SIZE(comm_ptr, rank, comm_size);
-    MPIR_Type_get_true_extent_impl(datatype, &true_lb, &true_extent);
-    MPIR_Datatype_get_extent_macro(datatype, extent);
-
     if (count == 0) {
         goto fn_exit;
     }
+
+    MPIR_COMM_RANK_SIZE(comm_ptr, rank, comm_size);
+
+    if (comm_size == 1) {
+        if (sendbuf != MPI_IN_PLACE) {
+            mpi_errno = MPIR_Localcopy(sendbuf, count, datatype, recvbuf, count, datatype);
+            MPIR_ERR_CHECK(mpi_errno);
+        }
+        goto fn_exit;
+    }
+
+    MPIR_Assert(MPIR_Op_is_commutative(op));
+
+    MPIR_Type_get_true_extent_impl(datatype, &true_lb, &true_extent);
+    MPIR_Datatype_get_extent_macro(datatype, extent);
 
     MPIR_ERR_CHKANDJUMP(!MPL_is_pof2(comm_size), mpi_errno, MPI_ERR_COMM, "**comm");
 
@@ -56,12 +66,13 @@ int MPIR_Reduce_intra_bine_lat(const void *sendbuf,
         equal_lsbs = (lsbs == 0 || lsbs == mask_lsbs);
 
         if (!equal_lsbs || ((mask << 1) >= comm_size && (rank != root))) {
-            /* TODO: usare un puntatore per scegliere prima se inviare il recvbuf o sendbuf 
-             * (evita di usare MPIR_Localcopy()) */
+            /* TODO: use a pointer to choose whether to send recvbuf or sendbuf beforehand 
+             * (avoids using MPIR_Localcopy()) */
             mpi_errno = MPIC_Send(recvbuf, count, datatype, partner, MPIR_REDUCE_TAG, comm_ptr, coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
             break;
         } else {
+
             if (tmpbuf == NULL) {
                 MPIR_CHKLMEM_MALLOC(tmpbuf, count * (MPL_MAX(extent, true_extent)));
                 /* adjust for potential negative lower bound in datatype */

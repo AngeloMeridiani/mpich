@@ -24,11 +24,6 @@ int MPIR_Scatter_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Datatyp
 
     MPIR_CHKLMEM_DECL();
 
-    /* TODO: Implement the case where sendcount != recvcount */
-    MPIR_Assert(sendcount == recvcount);
-    /* TODO: Implement the case where sendtype != recvtype */
-    MPIR_Assert(sendtype == recvtype);
-
     if (sendcount == 0 || (recvcount == 0 && recvbuf != MPI_IN_PLACE)) {
         goto fn_exit;
     }
@@ -56,7 +51,7 @@ int MPIR_Scatter_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Datatyp
 
     /* Down -- send bottom half */
     halving_direction = 1;
-    if (rank % 2) {
+    if (vrank % 2) {
         /* Up -- send top half */
         halving_direction = -1;
     }
@@ -64,7 +59,7 @@ int MPIR_Scatter_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Datatyp
      * be the direction they ended up with if we have an odd number
      * of steps. If not, invert.
      */
-    if (MPII_Bine_log2(comm_size) % 2 == 0) {
+    if (MPL_log2(comm_size) % 2 == 0) {
         halving_direction *= -1;
     }
 
@@ -76,30 +71,63 @@ int MPIR_Scatter_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Datatyp
      * Odd ranks subtracted 2^0, 2^2, 2^4, ... from min_resident_block
      *      and added 2^1, 2^3, 2^5, ... to max_resident_block
      */
-    if (rank % 2 == 0) {
+    if (vrank % 2 == 0) {
         max_resident_block =
-            MPII_Bine_mod((rank + 0x55555555) & ((0x1 << (int) MPII_Bine_log2(comm_size)) - 1),
+            MPII_Bine_mod((vrank + 0x55555555) & ((0x1 << (int) MPL_log2(comm_size)) - 1),
                           comm_size);
         min_resident_block =
-            MPII_Bine_mod((rank - 0xAAAAAAAA) & ((0x1 << (int) MPII_Bine_log2(comm_size)) - 1),
+            MPII_Bine_mod((vrank - 0xAAAAAAAA) & ((0x1 << (int) MPL_log2(comm_size)) - 1),
                           comm_size);
     } else {
         min_resident_block =
-            MPII_Bine_mod((rank - 0x55555555) & ((0x1 << (int) MPII_Bine_log2(comm_size)) - 1),
+            MPII_Bine_mod((vrank - 0x55555555) & ((0x1 << (int) MPL_log2(comm_size)) - 1),
                           comm_size);
         max_resident_block =
-            MPII_Bine_mod((rank + 0xAAAAAAAA) & ((0x1 << (int) MPII_Bine_log2(comm_size)) - 1),
+            MPII_Bine_mod((vrank + 0xAAAAAAAA) & ((0x1 << (int) MPL_log2(comm_size)) - 1),
                           comm_size);
     }
 
-    /* In case comm_size == 1 we set the mask to 0 to skip 
+    /* In the case comm_size == 1 we set the mask to 0 to skip
      * the while loop and copy only the sendbuf into the recvbuf
+     * as the final step.
      */
-    mask = (comm_size == 1) ? 0x0 : 0x1 << (int) (MPII_Bine_log2(comm_size) - 1);
-    sbuf_offset = rank;
+    mask = (comm_size == 1) ? 0x0 : 0x1 << (int) (MPL_log2(comm_size) - 1);
+    sbuf_offset = vrank;
     if (root == rank) {
         recvd = 1;
         sbuf = (char *) sendbuf;
+    }
+
+    /* if the root is not rank 0, we reorder the sendbuf in order of
+     * relative ranks and copy it into a temporary buffer, so that
+     * all the sends from the root are contiguous and in the right
+     * order. */
+    if (rank == root) {
+        if (root != 0) {
+            int tmp_buf_size = nbytes * comm_size;
+            MPIR_CHKLMEM_MALLOC(tmp_buf, tmp_buf_size);
+
+            if (recvbuf != MPI_IN_PLACE) {
+                mpi_errno = MPIR_Localcopy(((char *) sendbuf + stext * sendcount * rank),
+                                           sendcount * (comm_size - rank), sendtype, tmp_buf,
+                                           nbytes * (comm_size - rank), MPIR_BYTE_INTERNAL);
+            } else {
+                mpi_errno = MPIR_Localcopy(((char *) sendbuf + stext * sendcount * (rank + 1)),
+                                           sendcount * (comm_size - rank - 1),
+                                           sendtype, (char *) tmp_buf + nbytes,
+                                           nbytes * (comm_size - rank - 1), MPIR_BYTE_INTERNAL);
+            }
+            MPIR_ERR_CHECK(mpi_errno);
+
+            mpi_errno = MPIR_Localcopy(sendbuf, sendcount * rank, sendtype,
+                                       ((char *) tmp_buf + nbytes * (comm_size - rank)),
+                                       nbytes * rank, MPIR_BYTE_INTERNAL);
+            MPIR_ERR_CHECK(mpi_errno);
+
+            sbuf = (char *) tmp_buf;
+        } else {
+            sbuf = (char *) sendbuf;
+        }
     }
 
     vrank_nb = MPII_Bine_binary_to_negabinary(vrank);
@@ -133,36 +161,21 @@ int MPIR_Scatter_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Datatyp
         }
 
         if (recvd) {
-            if (rank == root) {
-                if (send_end >= send_start) {
-                    mpi_errno = MPIC_Send((char *) sbuf + send_start * sendcount * stext,
-                                          sendcount * (send_end - send_start + 1), sendtype,
-                                          partner, MPIR_SCATTER_TAG, comm_ptr, coll_attr);
-                    MPIR_ERR_CHECK(mpi_errno);
-                } else {
-                    mpi_errno = MPIC_Send((char *) sbuf + send_start * sendcount * stext,
-                                          sendcount * ((comm_size - 1) - send_start + 1), sendtype,
-                                          partner, MPIR_SCATTER_TAG, comm_ptr, coll_attr);
-                    MPIR_ERR_CHECK(mpi_errno);
-                    mpi_errno = MPIC_Send((char *) sbuf, sendcount * (send_end + 1), sendtype,
-                                          partner, MPIR_SCATTER_TAG, comm_ptr, coll_attr);
-                    MPIR_ERR_CHECK(mpi_errno);
-                }
+            /* Since intermediate nodes forward data using tmp_buf and use MPIR_BYTE_INTERNAL
+             * as datatype, we distinguish the MPIC_Send()
+             * performed by the root (which use the original buffer and datatype) from those
+             * performed by intermediate nodes.
+             */
+            if (rank == root && root == 0) {
+                mpi_errno = MPIC_Send((char *) sbuf + send_start * sendcount * stext,
+                                      sendcount * (send_end - send_start + 1), sendtype,
+                                      partner, MPIR_SCATTER_TAG, comm_ptr, coll_attr);
+                MPIR_ERR_CHECK(mpi_errno);
             } else {
-                if (send_end >= send_start) {
-                    mpi_errno = MPIC_Send((char *) sbuf + send_start * nbytes,
-                                          nbytes * (send_end - send_start + 1), MPIR_BYTE_INTERNAL,
-                                          partner, MPIR_SCATTER_TAG, comm_ptr, coll_attr);
-                    MPIR_ERR_CHECK(mpi_errno);
-                } else {
-                    mpi_errno = MPIC_Send((char *) sbuf + send_start * nbytes,
-                                          nbytes * ((comm_size - 1) - send_start + 1), MPIR_BYTE_INTERNAL,
-                                          partner, MPIR_SCATTER_TAG, comm_ptr, coll_attr);
-                    MPIR_ERR_CHECK(mpi_errno);
-                    mpi_errno = MPIC_Send((char *) sbuf, nbytes * (send_end + 1), MPIR_BYTE_INTERNAL,
-                                          partner, MPIR_SCATTER_TAG, comm_ptr, coll_attr);
-                    MPIR_ERR_CHECK(mpi_errno);
-                }
+                mpi_errno = MPIC_Send((char *) sbuf + send_start * nbytes,
+                                      nbytes * (send_end - send_start + 1), MPIR_BYTE_INTERNAL,
+                                      partner, MPIR_SCATTER_TAG, comm_ptr, coll_attr);
+                MPIR_ERR_CHECK(mpi_errno);
             }
         } else if (equal_lsbs) {
             /* Setup the buffers to be used from now on
@@ -184,7 +197,7 @@ int MPIR_Scatter_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Datatyp
                 min_resident_block = 0;
                 max_resident_block = num_blocks - 1;
 
-                sbuf_offset = MPII_Bine_mod(rank - recv_start, comm_size);
+                sbuf_offset = MPII_Bine_mod(vrank - recv_start, comm_size);
             }
             if (recv_end >= recv_start) {
                 if (!is_leaf) {
@@ -198,29 +211,6 @@ int MPIR_Scatter_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Datatyp
                                           partner, MPIR_SCATTER_TAG, comm_ptr, MPI_STATUS_IGNORE);
                 }
                 MPIR_ERR_CHECK(mpi_errno);
-            } else {
-                if (!is_leaf) {
-                    mpi_errno = MPIC_Recv((char *) rbuf,
-                                          nbytes * ((comm_size - 1) - recv_start + 1),
-                                          MPIR_BYTE_INTERNAL, partner, MPIR_SCATTER_TAG, comm_ptr,
-                                          MPI_STATUS_IGNORE);
-                    MPIR_ERR_CHECK(mpi_errno);
-                    mpi_errno = MPIC_Recv((char *) rbuf + (nbytes * ((comm_size - 1) - recv_start + 1)),
-                                          nbytes * (recv_end + 1), MPIR_BYTE_INTERNAL, partner,
-                                          MPIR_SCATTER_TAG, comm_ptr, MPI_STATUS_IGNORE);
-                    MPIR_ERR_CHECK(mpi_errno);
-                } else {
-                    /* The leaf receives directly to the recv buffer */
-                    mpi_errno =
-                        MPIC_Recv((char *) rbuf, recvcount * ((comm_size - 1) - recv_start + 1),
-                                  recvtype, partner, MPIR_SCATTER_TAG, comm_ptr, MPI_STATUS_IGNORE);
-                    MPIR_ERR_CHECK(mpi_errno);
-                    mpi_errno =
-                        MPIC_Recv((char *) rbuf + (recvcount * ((comm_size - 1) - recv_start + 1)) * stext,
-                                  recvcount * (recv_end + 1), recvtype, partner, MPIR_SCATTER_TAG,
-                                  comm_ptr, MPI_STATUS_IGNORE);
-                    MPIR_ERR_CHECK(mpi_errno);
-                }
             }
             recvd = 1;
         }
@@ -228,19 +218,21 @@ int MPIR_Scatter_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Datatyp
         halving_direction *= -1;
     }
 
-    if (rank == root && recvbuf != MPI_IN_PLACE) {
+    if ((rank == root) && (root == 0) && (recvbuf != MPI_IN_PLACE)) {
+        /* put rank's data in recvbuf if not MPI_IN_PLACE */
         mpi_errno =
             MPIR_Localcopy((char *) sbuf + sbuf_offset * stext * sendcount, sendcount, sendtype,
                            (char *) recvbuf, recvcount, recvtype);
         MPIR_ERR_CHECK(mpi_errno);
     } else if (!is_leaf && (recvbuf != MPI_IN_PLACE)) {
-        mpi_errno =
-            MPIR_Localcopy((char *) sbuf + sbuf_offset * nbytes, nbytes, MPIR_BYTE_INTERNAL,
-                           (char *) recvbuf, recvcount, recvtype);
+        /* non-leaf nodes copy the data from tmp_buf to recvbuf if not MPI_IN_PLACE */
+        mpi_errno = MPIR_Localcopy((char *) sbuf + sbuf_offset * nbytes, nbytes, MPIR_BYTE_INTERNAL, 
+                                   (char *) recvbuf, recvcount, recvtype);
         MPIR_ERR_CHECK(mpi_errno);
     }
 
   fn_exit:
+    printf("L'algoritmo scatter è stato eseguito con successo \n");
     MPIR_CHKLMEM_FREEALL();
     return mpi_errno;
   fn_fail:

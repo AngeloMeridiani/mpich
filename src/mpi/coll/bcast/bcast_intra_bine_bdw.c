@@ -10,9 +10,9 @@
  * For large messages, we use a BINE algorithm implemented with a scatter
  * followed by a allgather.
  */
-int MPIR_Bcast_intra_bine_bdw_remap(void *buffer, MPI_Aint count,
-                                    MPI_Datatype datatype, int root,
-                                    MPIR_Comm *comm_ptr, int coll_attr)
+int MPIR_Bcast_intra_bine_bdw(void *buffer, MPI_Aint count,
+                              MPI_Datatype datatype, int root,
+                              MPIR_Comm *comm_ptr, int coll_attr)
 {
     int comm_size, rank, mpi_errno = MPI_SUCCESS, vrank;
     int mask, inverse_mask, block_first_mask, remapped_rank, receiving_mask;
@@ -71,7 +71,7 @@ int MPIR_Bcast_intra_bine_bdw_remap(void *buffer, MPI_Aint count,
 
     vrank = MPII_Bine_mod(rank - root, comm_size);
     mask = 0x1;
-    inverse_mask = 0x1 << (int) (MPII_Bine_log2(comm_size) - 1);
+    inverse_mask = 0x1 << (int) (MPL_log2(comm_size) - 1);
     block_first_mask = ~(inverse_mask - 1);
     remapped_rank = MPII_Bine_remap_rank(comm_size, vrank);
     receiving_mask = inverse_mask << 1; /* Root never receives. By having a large mask inverse_mask will always be < receiving_mask */

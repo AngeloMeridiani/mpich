@@ -78,7 +78,7 @@ bcast-intra:
         extra_params: tree_type, k, is_non_blocking, chunk_size, recv_pre_posted
         cvar_params: TREE_TYPE, TREE_KVAL, IS_NON_BLOCKING, TREE_PIPELINE_CHUNK_SIZE, RECV_PRE_POST 
     bine_lat
-    bine_bdw_remap
+    bine_bdw
 
 ibcast-intra:
     sched_binomial
@@ -374,6 +374,8 @@ allreduce-intra:
     ccl
         extra_params: ccl
         cvar_params: CCL
+    bine_lat
+    bine_bdw
 allreduce-inter:
     reduce_exchange_bcast
 iallreduce-intra:

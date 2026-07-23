@@ -193,7 +193,7 @@ cvars:
         pipelined_tree                          - Force tree-based pipelined algorithm
         tree                                    - Force tree-based algorithm
         bine_lat                                - Force bine latency algorithm
-        bine_bdw_remap                          - Force bine bandwidth algorithm
+        bine_bdw                                - Force bine bandwidth algorithm
 
     - name        : MPIR_CVAR_BCAST_CIRC_CHUNK_SIZE
       category    : COLLECTIVE
@@ -1413,6 +1413,8 @@ cvars:
         ring                     - Force ring algorithm
         k_reduce_scatter_allgather - Force reduce scatter allgather algorithm
         ccl                      - Force CCL algorithm
+        bine_lat                 - Force bine latency algorithm
+        bine_bdw                 - Force bine bandwidth algorithm
     
     - name        : MPIR_CVAR_ALLREDUCE_RECURSIVE_MULTIPLYING_KVAL
       category    : COLLECTIVE

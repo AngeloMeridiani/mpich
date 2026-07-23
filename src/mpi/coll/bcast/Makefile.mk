@@ -19,7 +19,7 @@ mpi_core_sources += \
     src/mpi/coll/bcast/bcast_intra_pipelined_tree.c \
     src/mpi/coll/bcast/bcast_inter_remote_send_local_bcast.c \
     src/mpi/coll/bcast/bcast_intra_bine_lat.c \
-    src/mpi/coll/bcast/bcast_intra_bine_bdw_remap.c
+    src/mpi/coll/bcast/bcast_intra_bine_bdw.c
 
 
 noinst_HEADERS += \

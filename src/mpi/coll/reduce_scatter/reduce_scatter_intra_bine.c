@@ -23,6 +23,11 @@ static inline int MPIR_Reduce_scatter_intra_bine_permute(const void *sendbuf, vo
 
     MPIR_COMM_RANK_SIZE(comm_ptr, rank, comm_size);
 
+    /*
+     * Current implementation only handles power-of-two number of processes.
+     */
+    MPIR_ERR_CHKANDJUMP(!MPL_is_pof2(comm_size), mpi_errno, MPI_ERR_COMM, "**comm");
+
     MPIR_Datatype_get_extent_macro(datatype, extent);
     MPIR_Type_get_true_extent_impl(datatype, &true_lb, &true_extent);
 
@@ -53,13 +58,13 @@ static inline int MPIR_Reduce_scatter_intra_bine_permute(const void *sendbuf, vo
     for (int i = 0; i < comm_size; i++) {
         remapped_rank = MPII_Bine_remap_rank(comm_size, i);
         if (sendbuf != MPI_IN_PLACE) {
-            mpi_errno = MPIR_Localcopy((char *) sendbuf + displs[i] * extent, recvcounts[i],
-                                       datatype,
+            mpi_errno = MPIR_Localcopy((char *) sendbuf + displs[i] * extent, 
+                                       recvcounts[i], datatype,
                                        (char *) tmp_results + displs[remapped_rank] * extent,
                                        recvcounts[i], datatype);
         } else {
-            mpi_errno = MPIR_Localcopy((char *) recvbuf + displs[i] * extent, recvcounts[i],
-                                       datatype,
+            mpi_errno = MPIR_Localcopy((char *) recvbuf + displs[i] * extent, 
+                                       recvcounts[i], datatype,
                                        (char *) tmp_results + displs[remapped_rank] * extent,
                                        recvcounts[i], datatype);
         }
@@ -67,7 +72,7 @@ static inline int MPIR_Reduce_scatter_intra_bine_permute(const void *sendbuf, vo
     }
 
     mask = 0x1;
-    inverse_mask = 0x1 << (int) (MPII_Bine_log2(comm_size) - 1);
+    inverse_mask = 0x1 << (MPL_log2(comm_size) - 1);
     block_first_mask = ~(inverse_mask - 1);
     remapped_rank = MPII_Bine_remap_rank(comm_size, rank);
     while (mask < comm_size) {
@@ -114,7 +119,7 @@ static inline int MPIR_Reduce_scatter_intra_bine_permute(const void *sendbuf, vo
         block_first_mask >>= 1;
     }
 
-    /* Final memcpy */
+    /* Final localcopy */
     mpi_errno = MPIR_Localcopy((char *) tmp_results + displs[remapped_rank] * extent,
                                recvcounts[rank], datatype, recvbuf, recvcounts[rank], datatype);
     MPIR_ERR_CHECK(mpi_errno);
@@ -126,10 +131,10 @@ static inline int MPIR_Reduce_scatter_intra_bine_permute(const void *sendbuf, vo
     goto fn_exit;
 }
 
-static int MPIR_Reduce_scatter_intra_bine_send_remap(const void *sendbuf, void *recvbuf,
-                                                     const MPI_Aint recvcounts[],
-                                                     MPI_Datatype datatype, MPI_Op op,
-                                                     MPIR_Comm *comm_ptr, int coll_attr)
+static inline int MPIR_Reduce_scatter_intra_bine_send_remap(const void *sendbuf, void *recvbuf,
+                                                            const MPI_Aint recvcounts[],
+                                                            MPI_Datatype datatype, MPI_Op op,
+                                                            MPIR_Comm *comm_ptr, int coll_attr)
 {
 
     int comm_size, rank, mpi_errno = MPI_SUCCESS;
@@ -139,13 +144,17 @@ static int MPIR_Reduce_scatter_intra_bine_send_remap(const void *sendbuf, void *
     MPI_Aint send_count, recv_count;
     MPI_Aint total_count, extent, true_lb, true_extent;
     MPI_Aint *displs = NULL;
-    MPI_Status status;
 
     void *tmp_recvbuf = NULL, *tmp_results = NULL;
 
     MPIR_CHKLMEM_DECL();
 
     MPIR_COMM_RANK_SIZE(comm_ptr, rank, comm_size);
+
+    /*
+     * Current implementation only handles power-of-two number of processes.
+     */
+    MPIR_ERR_CHKANDJUMP(!MPL_is_pof2(comm_size), mpi_errno, MPI_ERR_COMM, "**comm");
 
     MPIR_Datatype_get_extent_macro(datatype, extent);
     MPIR_Type_get_true_extent_impl(datatype, &true_lb, &true_extent);
@@ -238,7 +247,7 @@ static int MPIR_Reduce_scatter_intra_bine_send_remap(const void *sendbuf, void *
     mpi_errno = MPIC_Sendrecv((char *) tmp_results + displs[remapped_rank] * extent,
                               recvcounts[remapped_rank], datatype, remapped_rank,
                               MPIR_REDUCE_SCATTER_TAG, (char *) recvbuf, recvcounts[rank], datatype,
-                              MPI_ANY_SOURCE, MPIR_REDUCE_SCATTER_TAG, comm_ptr, &status,
+                              MPI_ANY_SOURCE, MPIR_REDUCE_SCATTER_TAG, comm_ptr, MPI_STATUS_IGNORE,
                               coll_attr);
     MPIR_ERR_CHECK(mpi_errno);
 
@@ -249,10 +258,10 @@ static int MPIR_Reduce_scatter_intra_bine_send_remap(const void *sendbuf, void *
     goto fn_exit;
 }
 
-int MPIR_Reduce_scatter_intra_bine_block_by_block(const void *sendbuf, void *recvbuf,
-                                                  const MPI_Aint recvcounts[],
-                                                  MPI_Datatype datatype, MPI_Op op,
-                                                  MPIR_Comm *comm_ptr, int coll_attr)
+static inline int MPIR_Reduce_scatter_intra_bine_block_by_block(const void *sendbuf, void *recvbuf,
+                                                                const MPI_Aint recvcounts[],
+                                                                MPI_Datatype datatype, MPI_Op op,
+                                                                MPIR_Comm *comm_ptr, int coll_attr)
 {
     int comm_size, rank, mpi_errno = MPI_SUCCESS;
     int mask, inverse_mask, block_first_mask, remapped_rank, partner;
@@ -266,6 +275,11 @@ int MPIR_Reduce_scatter_intra_bine_block_by_block(const void *sendbuf, void *rec
     MPIR_CHKLMEM_DECL();
 
     MPIR_COMM_RANK_SIZE(comm_ptr, rank, comm_size);
+
+    /*
+     * Current implementation only handles power-of-two number of processes.
+     */
+    MPIR_ERR_CHKANDJUMP(!MPL_is_pof2(comm_size), mpi_errno, MPI_ERR_COMM, "**comm");
 
     MPIR_Datatype_get_extent_macro(datatype, extent);
     MPIR_Type_get_true_extent_impl(datatype, &true_lb, &true_extent);
@@ -409,8 +423,8 @@ int MPIR_Reduce_scatter_intra_bine(const void *sendbuf, void *recvbuf,
     MPIR_Assert(is_commutative);
 
     /* Here we use the CVAR MPIR_CVAR_REDUCE_SCATTER_BINE_TYPE to select the
-     * correct algorithm. If an invalid value is given, then the algorithm
-     * 'permute' is used by default.
+     * correct algorithm. If an invalid value is given, then the 
+     * defaultalgorithm used is MPIR_Reduce_scatter_intra_bine_permute.
      */
     switch (bine_type) {
         case MPIR_BINE_TYPE_PERMUTE:
