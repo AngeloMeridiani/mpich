@@ -6,6 +6,11 @@
 #include "mpiimpl.h"
 #include "mpir_bine.h"
 
+/* This function implements a negabinomial tree reduce.
+
+   Cost = 
+ */
+
 int MPIR_Reduce_intra_bine_lat(const void *sendbuf, void *recvbuf,
                                MPI_Aint count, MPI_Datatype datatype, MPI_Op op,
                                int root, MPIR_Comm *comm_ptr, int coll_attr) {
@@ -14,7 +19,7 @@ int MPIR_Reduce_intra_bine_lat(const void *sendbuf, void *recvbuf,
     int steps, adjsize, extra_ranks, is_power_of_two, loop_flag, new_rank;
     int partner, abs_partner, btnb_vrank, mask_lsbs, lsbs, equal_lsbs;
     MPI_Aint true_lb, true_extent, extent;
-    char *tmpbuf = NULL;
+    char *resbuf = NULL, *tmpbuf = NULL;
     MPI_Aint buf_size;
     MPIR_CHKLMEM_DECL();
 
@@ -92,7 +97,8 @@ int MPIR_Reduce_intra_bine_lat(const void *sendbuf, void *recvbuf,
                                   MPII_Bine_mod((vrank + 1) + root, comm_size),
                                   MPIR_REDUCE_TAG, comm_ptr, MPI_STATUS_IGNORE);
             MPIR_ERR_CHECK(mpi_errno);
-            mpi_errno = MPIR_Reduce_local(tmpbuf, recvbuf, count, datatype, op);
+            mpi_errno = MPIR_Reduce_local((char *)tmpbuf, (char *)recvbuf, count,
+                                          datatype, op);
             MPIR_ERR_CHECK(mpi_errno);
             new_rank = vrank >> 1;
         }
@@ -105,8 +111,8 @@ int MPIR_Reduce_intra_bine_lat(const void *sendbuf, void *recvbuf,
     if (!loop_flag) {
         while (mask < adjsize) {
             partner = btnb_vrank ^ ((mask << 1) - 1);
-            partner = MPII_Bine_mod(
-                MPII_Bine_negabinary_to_binary(partner), adjsize);
+            partner =
+                MPII_Bine_mod(MPII_Bine_negabinary_to_binary(partner), adjsize);
             /* Compute absolute partner */
             abs_partner = (partner < extra_ranks) ? (partner * 2)
                                                   : (partner + extra_ranks);
@@ -115,9 +121,7 @@ int MPIR_Reduce_intra_bine_lat(const void *sendbuf, void *recvbuf,
             lsbs = btnb_vrank & mask_lsbs; /* Extract k LSBs */
             equal_lsbs = (lsbs == 0 || lsbs == mask_lsbs);
 
-            if (!equal_lsbs || ((mask << 1) >= comm_size && (rank != root))) {
-                /* TODO: use a pointer to choose whether to send recvbuf or
-                 * sendbuf beforehand (avoids using MPIR_Localcopy()) */
+            if (!equal_lsbs || ((mask << 1) >= adjsize && (rank != root))) {
                 mpi_errno = MPIC_Send(recvbuf, count, datatype, abs_partner,
                                       MPIR_REDUCE_TAG, comm_ptr, coll_attr);
                 MPIR_ERR_CHECK(mpi_errno);
@@ -135,9 +139,9 @@ int MPIR_Reduce_intra_bine_lat(const void *sendbuf, void *recvbuf,
         }
     }
 
-fn_exit:
+  fn_exit:
     MPIR_CHKLMEM_FREEALL();
     return mpi_errno;
-fn_fail:
+  fn_fail:
     goto fn_exit;
 }

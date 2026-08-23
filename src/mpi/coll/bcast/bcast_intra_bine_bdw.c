@@ -53,7 +53,8 @@ int MPIR_Bcast_intra_bine_bdw(void *buffer, MPI_Aint count,
     } else {
         MPIR_CHKLMEM_MALLOC(tmp_buf, nbytes);
         if (rank == root) {
-            mpi_errno = MPIR_Localcopy(buffer, count, datatype, tmp_buf, nbytes, MPIR_BYTE_INTERNAL);
+            mpi_errno = MPIR_Localcopy(buffer, count, datatype,
+                                       tmp_buf, nbytes, MPIR_BYTE_INTERNAL);
             MPIR_ERR_CHECK(mpi_errno);
         }
     }
@@ -74,7 +75,8 @@ int MPIR_Bcast_intra_bine_bdw(void *buffer, MPI_Aint count,
     inverse_mask = 0x1 << (int) (MPL_log2(comm_size) - 1);
     block_first_mask = ~(inverse_mask - 1);
     remapped_rank = MPII_Bine_remap_rank(comm_size, vrank);
-    receiving_mask = inverse_mask << 1; /* Root never receives. By having a large mask inverse_mask will always be < receiving_mask */
+    /* Root never receives. By having a large mask inverse_mask will always be < receiving_mask */
+    receiving_mask = inverse_mask << 1;
 
     /* I receive in the step corresponding to the position (starting from right)
      * of the first 1 in my remapped rank -- this indicates the step when the data reaches me
@@ -189,7 +191,8 @@ int MPIR_Bcast_intra_bine_bdw(void *buffer, MPI_Aint count,
 
     if (!is_contig) {
         if (rank != root) {
-            mpi_errno = MPIR_Localcopy(tmp_buf, nbytes, MPIR_BYTE_INTERNAL, buffer, count, datatype);
+            mpi_errno = MPIR_Localcopy(tmp_buf, nbytes, MPIR_BYTE_INTERNAL,
+                                       buffer, count, datatype);
             MPIR_ERR_CHECK(mpi_errno);
         }
     }

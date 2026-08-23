@@ -14,9 +14,13 @@ static inline int MPIR_Allgather_intra_bine_permute(const void *sendbuf, MPI_Ain
 
     int rank, comm_size, steps, mpi_errno = MPI_SUCCESS, remote, data_exchange;
     int *permutation = NULL;
+    int tmpcount;
     MPI_Aint rext, rsize;
     char *tmprecv = NULL;
-    void *tmp_buf = NULL;
+    void *tmpbuf = NULL;
+    int is_contig = 0, nbytes;
+    MPI_Aint true_lb, true_extent;
+    MPI_Datatype tmptype;
 
     MPIR_CHKLMEM_DECL();
 
@@ -31,16 +35,31 @@ static inline int MPIR_Allgather_intra_bine_permute(const void *sendbuf, MPI_Ain
     MPIR_Datatype_get_extent_macro(recvtype, rext);
     MPIR_Datatype_get_size_macro(recvtype, rsize);
 
-    MPIR_CHKLMEM_MALLOC(tmp_buf, comm_size * rsize * recvcount);
+    if (HANDLE_IS_BUILTIN(recvtype)) {
+        is_contig = 1;
+    } else {
+        MPIR_Datatype_is_contig(recvtype, &is_contig);
+    }
+
+    nbytes = rsize * recvcount;
+
+    if (is_contig) {
+        /* contiguous. no need to pack. */
+        MPIR_Type_get_true_extent_impl(recvtype, &true_lb, &true_extent);
+        tmpbuf = MPIR_get_contig_ptr(recvbuf, true_lb);
+    } else {
+        MPIR_CHKLMEM_MALLOC(tmpbuf, nbytes * comm_size);
+    }
 
     if (MPI_IN_PLACE != sendbuf) {
         mpi_errno = MPIR_Localcopy(sendbuf, sendcount, sendtype,
-                                   tmp_buf, recvcount * rsize, MPIR_BYTE_INTERNAL);
+                                   tmpbuf, nbytes, MPIR_BYTE_INTERNAL);
         MPIR_ERR_CHECK(mpi_errno);
-    } else {
-        mpi_errno = MPIR_Localcopy((char *) recvbuf + rank * recvcount * rext,
-                                   recvcount, recvtype, tmp_buf, recvcount * rsize,
-                                   MPIR_BYTE_INTERNAL);
+    } else if (!is_contig || rank != 0) {
+        /* if true_lb == 0, then tmpsend == tmprecv */
+        mpi_errno = MPIR_Localcopy((char *) recvbuf + (MPI_Aint) rank * (MPI_Aint) recvcount * rext,
+                                   recvcount, recvtype,
+                                   tmpbuf, nbytes, MPIR_BYTE_INTERNAL);
         MPIR_ERR_CHECK(mpi_errno);
     }
 
@@ -55,25 +74,43 @@ static inline int MPIR_Allgather_intra_bine_permute(const void *sendbuf, MPI_Ain
 
         MPII_Bine_get_permutation(rank, step, steps, comm_size, permutation, data_exchange);
 
-        tmprecv = (char *) tmp_buf + (MPI_Aint) data_exchange *(MPI_Aint) recvcount * rsize;
+        /* if recvtype isn't contiguous, we send/recv
+         * the packed data using MPIR_BYTE_INTERNAL.
+         * Otherwise, the original recvtype is used directly.
+         */
+        if (!is_contig) {
+            tmprecv = (char *) tmpbuf + (MPI_Aint) data_exchange * (MPI_Aint) nbytes;
+            tmpcount = data_exchange * nbytes;
+            tmptype = MPIR_BYTE_INTERNAL;
+        } else {
+            tmprecv = (char *) tmpbuf + (MPI_Aint) data_exchange * (MPI_Aint) recvcount * rext;
+            tmpcount = data_exchange * recvcount;
+            tmptype = recvtype;
+        }
 
         mpi_errno =
-            MPIC_Sendrecv(tmp_buf, data_exchange * recvcount * rsize, MPIR_BYTE_INTERNAL, remote,
-                          MPIR_ALLGATHER_TAG, tmprecv, data_exchange * recvcount * rsize,
-                          MPIR_BYTE_INTERNAL, remote, MPIR_ALLGATHER_TAG, comm_ptr,
+            MPIC_Sendrecv(tmpbuf, tmpcount, tmptype, remote,
+                          MPIR_ALLGATHER_TAG, tmprecv, tmpcount,
+                          tmptype, remote, MPIR_ALLGATHER_TAG, comm_ptr,
                           MPI_STATUS_IGNORE, coll_attr);
         MPIR_ERR_CHECK(mpi_errno);
         data_exchange <<= 1;
     }
 
-    mpi_errno =
-        MPII_Bine_reorder_blocks(tmp_buf, recvcount * rsize, MPIR_BYTE_INTERNAL, permutation,
-                                 comm_size);
-    MPIR_ERR_CHECK(mpi_errno);
-
-    mpi_errno = MPIR_Localcopy(tmp_buf, comm_size * recvcount * rsize, MPIR_BYTE_INTERNAL,
-                               recvbuf, comm_size * recvcount, recvtype);
-    MPIR_ERR_CHECK(mpi_errno);
+    if (!is_contig) {
+        mpi_errno =
+            MPII_Bine_reorder_blocks(tmpbuf, nbytes, MPIR_BYTE_INTERNAL, permutation,
+                                    comm_size);
+        MPIR_ERR_CHECK(mpi_errno);
+        mpi_errno = MPIR_Localcopy(tmpbuf, nbytes * comm_size, MPIR_BYTE_INTERNAL,
+                                   recvbuf, recvcount * comm_size, recvtype);
+        MPIR_ERR_CHECK(mpi_errno);
+    } else {
+        mpi_errno =
+            MPII_Bine_reorder_blocks(recvbuf, recvcount, recvtype, permutation,
+                                     comm_size);
+        MPIR_ERR_CHECK(mpi_errno);
+    }
 
   fn_exit:
     MPIR_CHKLMEM_FREEALL();
@@ -82,18 +119,25 @@ static inline int MPIR_Allgather_intra_bine_permute(const void *sendbuf, MPI_Ain
     goto fn_exit;
 }
 
-static inline int MPIR_Allgather_intra_bine_block_by_block(const void *sendbuf, MPI_Aint sendcount,
-                                                           MPI_Datatype sendtype, void *recvbuf,
-                                                           MPI_Aint recvcount,
-                                                           MPI_Datatype recvtype,
-                                                           MPIR_Comm *comm_ptr, int coll_attr)
+static inline int 
+MPIR_Allgather_intra_bine_block_by_block(const void *sendbuf,
+                                         MPI_Aint sendcount,
+                                         MPI_Datatype sendtype,
+                                         void *recvbuf,
+                                         MPI_Aint recvcount,
+                                         MPI_Datatype recvtype,
+                                         MPIR_Comm *comm_ptr, int coll_attr)
 {
     int rank, comm_size, steps, mpi_errno = MPI_SUCCESS, remote;
     int *s_bitmap = NULL, *r_bitmap = NULL;
-    MPI_Aint rext, rsize;
+    MPI_Aint rext, rsize, tmpoffset;
     char *tmpsend = NULL, *tmprecv = NULL;
-    void *tmp_buf = NULL;
     MPIR_Request **requests = NULL;
+    int is_contig = 0, nbytes;
+    MPI_Aint true_lb, true_extent;
+    void *tmpbuf = NULL;
+    int tmpcount;
+    MPI_Datatype tmptype;
 
     MPIR_CHKLMEM_DECL();
 
@@ -108,19 +152,48 @@ static inline int MPIR_Allgather_intra_bine_block_by_block(const void *sendbuf, 
     MPIR_Datatype_get_extent_macro(recvtype, rext);
     MPIR_Datatype_get_size_macro(recvtype, rsize);
 
-    MPIR_CHKLMEM_MALLOC(tmp_buf, recvcount * comm_size * rsize);
+    if (HANDLE_IS_BUILTIN(recvtype)) {
+        is_contig = 1;
+    } else {
+        MPIR_Datatype_is_contig(recvtype, &is_contig);
+    }
+
+    nbytes = rsize * recvcount;
+
+    if (is_contig) {
+        /* contiguous. no need to pack. */
+        MPIR_Type_get_true_extent_impl(recvtype, &true_lb, &true_extent);
+        tmpbuf = MPIR_get_contig_ptr(recvbuf, true_lb);
+    } else {
+        MPIR_CHKLMEM_MALLOC(tmpbuf, nbytes * comm_size);
+    }
+
+    /* if recvtype isn't contiguous, we send/recv
+     * the packed data using MPIR_BYTE_INTERNAL.
+     * Otherwise, the original recvtype is used directly.
+     */
+    if (!is_contig) {
+        tmpcount = nbytes;
+        tmptype = MPIR_BYTE_INTERNAL;
+        tmpoffset = nbytes;
+    } else {
+        tmpcount = recvcount;
+        tmptype = recvtype;
+        tmpoffset = recvcount * rext;
+    }
 
     if (MPI_IN_PLACE != sendbuf) {
         tmpsend = (char *) sendbuf;
-        tmprecv = (char *) tmp_buf + (MPI_Aint) rank *(MPI_Aint) recvcount *rsize;
+        tmprecv = (char *) tmpbuf + (MPI_Aint) rank * tmpoffset;
         mpi_errno = MPIR_Localcopy(tmpsend, sendcount, sendtype,
-                                   tmprecv, recvcount * rsize, MPIR_BYTE_INTERNAL);
+                                   tmprecv, tmpcount, tmptype);
         MPIR_ERR_CHECK(mpi_errno);
-    } else {
-        tmpsend = (char *) recvbuf + (MPI_Aint) rank *(MPI_Aint) recvcount *rext;
-        tmprecv = (char *) tmp_buf + (MPI_Aint) rank *(MPI_Aint) recvcount *rsize;
+    /* if true_lb == 0, then tmpsend == tmprecv */
+    } else if (!is_contig) {
+        tmpsend = (char *) recvbuf + (MPI_Aint) rank * (MPI_Aint) recvcount * rext;
+        tmprecv = (char *) tmpbuf + (MPI_Aint) rank * (MPI_Aint) nbytes;
         mpi_errno = MPIR_Localcopy(tmpsend, recvcount, recvtype,
-                                   tmprecv, recvcount * rsize, MPIR_BYTE_INTERNAL);
+                                   tmprecv, nbytes, MPIR_BYTE_INTERNAL);
         MPIR_ERR_CHECK(mpi_errno);
     }
 
@@ -139,16 +212,16 @@ static inline int MPIR_Allgather_intra_bine_block_by_block(const void *sendbuf, 
 
         for (int block = 0; block < comm_size; block++) {
             if (s_bitmap[block] != 0) {
-                tmpsend = (char *) tmp_buf + (MPI_Aint) block *(MPI_Aint) recvcount *rsize;
-                mpi_errno = MPIC_Isend(tmpsend, recvcount * rsize, MPIR_BYTE_INTERNAL, remote,
+                tmpsend = (char *) tmpbuf + (MPI_Aint) block * tmpoffset;
+                mpi_errno = MPIC_Isend(tmpsend, tmpcount, tmptype, remote,
                                        MPIR_ALLGATHER_TAG, comm_ptr,
                                        requests + num_reqs, coll_attr);
                 MPIR_ERR_CHECK(mpi_errno);
                 num_reqs++;
             }
             if (r_bitmap[block] != 0) {
-                tmprecv = (char *) tmp_buf + (MPI_Aint) block *(MPI_Aint) recvcount *rsize;
-                mpi_errno = MPIC_Irecv(tmprecv, recvcount * rsize, MPIR_BYTE_INTERNAL, remote,
+                tmprecv = (char *) tmpbuf + (MPI_Aint) block * tmpoffset;
+                mpi_errno = MPIC_Irecv(tmprecv, tmpcount, tmptype, remote,
                                        MPIR_ALLGATHER_TAG, comm_ptr, requests + num_reqs);
                 MPIR_ERR_CHECK(mpi_errno);
                 num_reqs++;
@@ -158,9 +231,11 @@ static inline int MPIR_Allgather_intra_bine_block_by_block(const void *sendbuf, 
         MPIR_ERR_CHECK(mpi_errno);
     }
 
-    mpi_errno = MPIR_Localcopy(tmp_buf, comm_size * recvcount * rsize, MPIR_BYTE_INTERNAL,
-                               recvbuf, comm_size * recvcount, recvtype);
-    MPIR_ERR_CHECK(mpi_errno);
+    if (!is_contig) {
+        mpi_errno = MPIR_Localcopy(tmpbuf, nbytes * comm_size, MPIR_BYTE_INTERNAL,
+                                   recvbuf, recvcount * comm_size, recvtype);
+        MPIR_ERR_CHECK(mpi_errno);
+    }
 
   fn_exit:
     MPIR_CHKLMEM_FREEALL();
@@ -176,11 +251,13 @@ static inline int MPIR_Allgather_intra_bine_send_remap(const void *sendbuf, MPI_
                                                        MPIR_Comm *comm_ptr, int coll_attr)
 {
     int rank, comm_size, steps, mpi_errno = MPI_SUCCESS;
-    int vrank, remote, vremote, send_block_location, distance;
-    MPI_Aint rext, rsize;
+    int vrank, remote, vremote, send_block_location, distance, is_contig, nbytes, tmpcount;
+    MPI_Aint rext, rsize, true_lb, true_extent;
     MPI_Aint step_scount;
+    MPI_Aint tmpoffset;
     char *tmpsend = NULL, *tmprecv = NULL;
-    void *tmp_buf = NULL;
+    void *tmpbuf = NULL;
+    MPI_Datatype tmptype;
 
     MPIR_CHKLMEM_DECL();
 
@@ -195,7 +272,35 @@ static inline int MPIR_Allgather_intra_bine_send_remap(const void *sendbuf, MPI_
     MPIR_Datatype_get_extent_macro(recvtype, rext);
     MPIR_Datatype_get_size_macro(recvtype, rsize);
 
-    MPIR_CHKLMEM_MALLOC(tmp_buf, recvcount * comm_size * rsize);
+    if (HANDLE_IS_BUILTIN(recvtype)) {
+        is_contig = 1;
+    } else {
+        MPIR_Datatype_is_contig(recvtype, &is_contig);
+    }
+
+    nbytes = rsize * recvcount;
+
+    if (is_contig) {
+        /* contiguous. no need to pack. */
+        MPIR_Type_get_true_extent_impl(recvtype, &true_lb, &true_extent);
+        tmpbuf = MPIR_get_contig_ptr(recvbuf, true_lb);
+    } else {
+        MPIR_CHKLMEM_MALLOC(tmpbuf, nbytes * comm_size);
+    }
+
+    /* if recvtype isn't contiguous, we send/recv
+     * the packed data using MPIR_BYTE_INTERNAL.
+     * Otherwise, the original recvtype is used directly.
+     */
+    if (!is_contig) {
+        tmpcount = nbytes;
+        tmptype = MPIR_BYTE_INTERNAL;
+        tmpoffset = nbytes;
+    } else {
+        tmpcount = recvcount;
+        tmptype = recvtype;
+        tmpoffset = recvcount * rext;
+    }
 
     /* Initialization step:
      * - if I gather the result for another rank, I send my buffer to that rank
@@ -203,31 +308,39 @@ static inline int MPIR_Allgather_intra_bine_send_remap(const void *sendbuf, MPI_
      * - if I gather the result for myself, I copy the data from the send buffer
      */
     vrank = (int) MPII_Bine_remap_rank(comm_size, rank);
-    tmprecv = (char *) tmp_buf + (MPI_Aint) vrank * (MPI_Aint) recvcount * rsize;
+    tmpsend = (char *) recvbuf + (MPI_Aint) rank * (MPI_Aint) recvcount * rext;
+    tmprecv = (char *) tmpbuf + (MPI_Aint) vrank * tmpoffset;
     if (vrank != rank) {
         if (sendbuf != MPI_IN_PLACE) {
             mpi_errno =
                 MPIC_Sendrecv(sendbuf, sendcount, sendtype,
                               MPII_Bine_get_sender_rec(comm_size, rank), MPIR_ALLGATHER_TAG,
-                              tmprecv, recvcount * rsize, MPIR_BYTE_INTERNAL, vrank,
+                              tmprecv, tmpcount, tmptype, vrank,
                               MPIR_ALLGATHER_TAG, comm_ptr, MPI_STATUS_IGNORE, coll_attr);
-        } else {
-            tmpsend = (char *) recvbuf + (MPI_Aint) rank * (MPI_Aint) recvcount * rext;
+        } else if (vrank != 0) {
+            /* if vrank != rank, then tmprecv != tmpsend. So it is safe to use
+             * MPIC_Sendrecv without the problem of an overlapping, even if the datatype
+             * is not contiguous.
+            */
             mpi_errno =
                 MPIC_Sendrecv(tmpsend, recvcount, recvtype,
                               MPII_Bine_get_sender_rec(comm_size, rank), MPIR_ALLGATHER_TAG,
-                              tmprecv, recvcount * rsize, MPIR_BYTE_INTERNAL, vrank,
+                              tmprecv, tmpcount, tmptype, vrank,
                               MPIR_ALLGATHER_TAG, comm_ptr, MPI_STATUS_IGNORE, coll_attr);
         }
         MPIR_ERR_CHECK(mpi_errno);
     } else {
         if (sendbuf != MPI_IN_PLACE) {
             mpi_errno = MPIR_Localcopy(sendbuf, sendcount, sendtype,
-                                       tmprecv, recvcount * rsize, MPIR_BYTE_INTERNAL);
-        } else {
-            tmpsend = (char *) recvbuf + (MPI_Aint) vrank *(MPI_Aint) recvcount *rext;
+                                       recvbuf, recvcount, recvtype);
+        } else if (!is_contig) {
+            /* Instead, if vrank == rank, then tmpsend and tmprecv point at the same
+             * address, resulting to an overlapping in memory. So we make sure
+             * it's not contiguous, because in that case recvbuf and tmpbuf point at the same
+             * address in memory.
+             */
             mpi_errno = MPIR_Localcopy(tmpsend, recvcount, recvtype,
-                                       tmprecv, recvcount * rsize, MPIR_BYTE_INTERNAL);
+                                       tmprecv, tmpcount, tmptype);
         }
         MPIR_ERR_CHECK(mpi_errno);
     }
@@ -239,35 +352,37 @@ static inline int MPIR_Allgather_intra_bine_send_remap(const void *sendbuf, MPI_
     distance = 0x1;
     send_block_location = vrank;
     for (int step = steps - 1; step >= 0; step--) {
-        step_scount = recvcount * distance;
+        step_scount = tmpcount * distance;
         remote = MPII_Bine_pi(rank, step, comm_size);
         vremote = (int) MPII_Bine_remap_rank(comm_size, remote);
 
         if (vrank < vremote) {
-            tmpsend = (char *) tmp_buf + (MPI_Aint) send_block_location *
-                (MPI_Aint) recvcount *rsize;
-            tmprecv = (char *) tmp_buf + (MPI_Aint) (send_block_location + distance) *
-                (MPI_Aint) recvcount *rsize;
+            tmpsend = (char *) tmpbuf + (MPI_Aint) send_block_location *
+                tmpoffset;
+            tmprecv = (char *) tmpbuf + (MPI_Aint) (send_block_location + distance) *
+                tmpoffset;
         } else {
-            tmpsend = (char *) tmp_buf +
-                (MPI_Aint) send_block_location *(MPI_Aint) recvcount *rsize;
-            tmprecv = (char *) tmp_buf + (MPI_Aint) (send_block_location - distance) *
-                (MPI_Aint) recvcount *rsize;
+            tmpsend = (char *) tmpbuf +
+                (MPI_Aint) send_block_location * tmpoffset;
+            tmprecv = (char *) tmpbuf + (MPI_Aint) (send_block_location - distance) *
+                tmpoffset;
             send_block_location -= distance;
         }
 
         mpi_errno =
-            MPIC_Sendrecv(tmpsend, step_scount * rsize, MPIR_BYTE_INTERNAL, remote,
-                          MPIR_ALLGATHER_TAG, tmprecv, step_scount * rsize, MPIR_BYTE_INTERNAL,
+            MPIC_Sendrecv(tmpsend, step_scount, tmptype, remote,
+                          MPIR_ALLGATHER_TAG, tmprecv, step_scount, tmptype,
                           remote, MPIR_ALLGATHER_TAG, comm_ptr, MPI_STATUS_IGNORE, coll_attr);
         MPIR_ERR_CHECK(mpi_errno);
 
         distance <<= 1;
     }
 
-    mpi_errno = MPIR_Localcopy(tmp_buf, comm_size * recvcount * rsize, MPIR_BYTE_INTERNAL,
-                               recvbuf, comm_size * recvcount, recvtype);
-    MPIR_ERR_CHECK(mpi_errno);
+    if (!is_contig) {
+        mpi_errno = MPIR_Localcopy(tmpbuf, nbytes * comm_size, MPIR_BYTE_INTERNAL,
+                                   recvbuf, recvcount * comm_size, recvtype);
+        MPIR_ERR_CHECK(mpi_errno);
+    }
 
   fn_exit:
     MPIR_CHKLMEM_FREEALL();
@@ -283,12 +398,13 @@ static inline int MPIR_Allgather_intra_bine_two_blocks(const void *sendbuf, MPI_
 {
 
     int rank, comm_size, steps, mpi_errno = MPI_SUCCESS, remote;
-    int mask, my_first, recv_index, send_index;
+    int mask, my_first, recv_index, send_index, is_contig, nbytes, tmpcount;
     int send_count, recv_count, extra_send, extra_recv, extra_tag;
-    MPI_Aint rext, rsize;
+    MPI_Aint rext, rsize, true_lb, true_extent;
+    MPI_Aint tmpoffset;
+    MPI_Datatype tmptype;
     MPIR_Request *req;
-    char *tmpsend = NULL, *tmprecv = NULL;
-    void *tmp_buf = NULL;
+    char *tmpsend = NULL, *tmprecv = NULL, *tmpbuf = NULL;
 
     MPIR_CHKLMEM_DECL();
 
@@ -303,24 +419,51 @@ static inline int MPIR_Allgather_intra_bine_two_blocks(const void *sendbuf, MPI_
     MPIR_Datatype_get_extent_macro(recvtype, rext);
     MPIR_Datatype_get_size_macro(recvtype, rsize);
 
-    MPIR_CHKLMEM_MALLOC(tmp_buf, comm_size * rsize * recvcount);
+    if (HANDLE_IS_BUILTIN(recvtype)) {
+        is_contig = 1;
+    } else {
+        MPIR_Datatype_is_contig(recvtype, &is_contig);
+    }
+
+    nbytes = rsize * recvcount;
+
+    if (is_contig) {
+        /* contiguous. no need to pack. */
+        MPIR_Type_get_true_extent_impl(recvtype, &true_lb, &true_extent);
+        tmpbuf = MPIR_get_contig_ptr(recvbuf, true_lb);
+    } else {
+        MPIR_CHKLMEM_MALLOC(tmpbuf, nbytes * comm_size);
+    }
+
+    /* if recvtype isn't contiguous, we send/recv
+     * the packed data using MPIR_BYTE_INTERNAL.
+     * Otherwise, the original recvtype is used directly.
+     */
+    if (!is_contig) {
+        tmpcount = nbytes;
+        tmptype = MPIR_BYTE_INTERNAL;
+        tmpoffset = nbytes;
+    } else {
+        tmpcount = recvcount;
+        tmptype = recvtype;
+        tmpoffset = recvcount * rext;
+    }
 
     /* Initialization step:
      * - if send buffer is not MPI_IN_PLACE, copy send buffer to block  of
      * receive buffer
      */
-
     if (MPI_IN_PLACE != sendbuf) {
         tmpsend = (char *) sendbuf;
-        tmprecv = (char *) tmp_buf + (MPI_Aint) rank *(MPI_Aint) recvcount *rsize;
+        tmprecv = (char *) tmpbuf + (MPI_Aint) rank * tmpoffset;
         mpi_errno = MPIR_Localcopy(tmpsend, sendcount, sendtype,
-                                   tmprecv, recvcount * rsize, MPIR_BYTE_INTERNAL);
+                                   tmprecv, tmpcount, tmptype);
         MPIR_ERR_CHECK(mpi_errno);
-    } else {
-        tmpsend = (char *) recvbuf + (MPI_Aint) rank *(MPI_Aint) recvcount *rext;
-        tmprecv = (char *) tmp_buf + (MPI_Aint) rank *(MPI_Aint) recvcount *rsize;
+    } else if (rank != 0) {
+        tmpsend = (char *) recvbuf + (MPI_Aint) rank *(MPI_Aint) recvcount * rext;
+        tmprecv = (char *) tmpbuf;
         mpi_errno = MPIR_Localcopy(tmpsend, recvcount, recvtype,
-                                   tmprecv, recvcount * rsize, MPIR_BYTE_INTERNAL);
+                                   tmprecv, tmpcount, tmptype);
         MPIR_ERR_CHECK(mpi_errno);
     }
 
@@ -360,27 +503,27 @@ static inline int MPIR_Allgather_intra_bine_two_blocks(const void *sendbuf, MPI_
 
         /* warparound communication */
         if (extra_recv != 0) {
-            tmprecv = (char *) tmp_buf;
+            tmprecv = (char *) tmpbuf;
             mpi_errno =
-                MPIC_Irecv(tmprecv, (MPI_Aint) extra_recv * recvcount * rsize, MPIR_BYTE_INTERNAL,
+                MPIC_Irecv(tmprecv, (MPI_Aint) extra_recv * tmpcount, tmptype,
                            remote, MPIR_ALLGATHER_TAG, comm_ptr, &req);
             MPIR_ERR_CHECK(mpi_errno);
         }
         if (extra_send != 0) {
-            tmpsend = (char *) tmp_buf;
+            tmpsend = (char *) tmpbuf;
             mpi_errno =
-                MPIC_Send(tmpsend, (MPI_Aint) extra_send * recvcount * rsize, MPIR_BYTE_INTERNAL,
+                MPIC_Send(tmpsend, (MPI_Aint) extra_send * tmpcount, tmptype,
                           remote, MPIR_ALLGATHER_TAG, comm_ptr, coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
         }
         /* Simple case: no wrap-around */
-        tmpsend = (char *) tmp_buf + (MPI_Aint) send_index * (MPI_Aint) recvcount * rsize;
-        tmprecv = (char *) tmp_buf + (MPI_Aint) recv_index * (MPI_Aint) recvcount * rsize;
+        tmpsend = (char *) tmpbuf + (MPI_Aint) send_index * tmpoffset;
+        tmprecv = (char *) tmpbuf + (MPI_Aint) recv_index * tmpoffset;
 
         mpi_errno =
-            MPIC_Sendrecv(tmpsend, (MPI_Aint) send_count * recvcount * rsize, MPIR_BYTE_INTERNAL,
+            MPIC_Sendrecv(tmpsend, (MPI_Aint) send_count * tmpcount, tmptype,
                           remote, MPIR_ALLGATHER_TAG, tmprecv,
-                          (MPI_Aint) recv_count * recvcount * rsize, MPIR_BYTE_INTERNAL, remote,
+                          (MPI_Aint) recv_count * tmpcount, tmptype, remote,
                           MPIR_ALLGATHER_TAG, comm_ptr, MPI_STATUS_IGNORE, coll_attr);
         MPIR_ERR_CHECK(mpi_errno);
 
@@ -392,9 +535,11 @@ static inline int MPIR_Allgather_intra_bine_two_blocks(const void *sendbuf, MPI_
         mask <<= 1;
     }
 
-    mpi_errno = MPIR_Localcopy(tmp_buf, comm_size * recvcount * rsize, MPIR_BYTE_INTERNAL,
-                               recvbuf, comm_size * recvcount, recvtype);
-    MPIR_ERR_CHECK(mpi_errno);
+    if (!is_contig) {
+        mpi_errno = MPIR_Localcopy(tmpbuf, nbytes * comm_size, MPIR_BYTE_INTERNAL,
+                                   recvbuf, recvcount * comm_size, recvtype);
+        MPIR_ERR_CHECK(mpi_errno);
+    }
 
   fn_exit:
     MPIR_CHKLMEM_FREEALL();
@@ -436,8 +581,8 @@ int MPIR_Allgather_intra_bine(const void *sendbuf, MPI_Aint sendcount,
             break;
         case MPIR_BINE_TYPE_TWO_BLOCKS:
             mpi_errno = MPIR_Allgather_intra_bine_two_blocks(sendbuf, sendcount, sendtype,
-                                                           recvbuf, recvcount, recvtype,
-                                                           comm_ptr, coll_attr);
+                                                             recvbuf, recvcount, recvtype,
+                                                             comm_ptr, coll_attr);
             break;
         default:
             mpi_errno = MPIR_Allgather_intra_bine_permute(sendbuf, sendcount, sendtype,

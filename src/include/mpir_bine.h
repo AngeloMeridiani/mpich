@@ -32,15 +32,13 @@ static int largest_negabinary[BINE_MAX_STEPS] = {
 
 static inline int MPII_Bine_mod(int a, int b) 
 {
+#ifdef MPL_HAVE_BUILTIN_POPCOUNT
     if (MPL_is_pof2(b)) {
         return a & (b - 1);
     }
+#endif
     int r = a % b;
     return r < 0 ? r + b : r;
-}
-
-static inline int MPII_Bine_mod_pof2(int a, int b) {
-    return a & (b - 1);
 }
 
 /**

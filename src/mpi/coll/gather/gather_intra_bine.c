@@ -12,17 +12,14 @@ int MPIR_Gather_intra_bine(const void *sendbuf, MPI_Aint sendcount,
                            MPIR_Comm *comm_ptr, int coll_attr)
 {
 
-    int comm_size, rank, stsize, mpi_errno = MPI_SUCCESS;
+    int comm_size, rank, mpi_errno = MPI_SUCCESS;
     int vrank, extension_direction, mask, partner, mask_lsbs, lsbs, equal_lsbs;
-    int nbytes = 0, sendtype_size, recvtype_size;
+    int nbytes = 0, recvtype_size, sendtype_size;
     MPI_Aint min_block_resident, max_block_resident;
     MPI_Aint recv_start, recv_end;
     MPI_Aint extent = 0;
     MPI_Aint tmp_buf_size;
-    MPI_Aint tmp_size, tmp_count;
     void *tmp_buf = NULL;
-    void *tmp_recv = NULL;
-    MPI_Datatype tmp_type;
     MPIR_CHKLMEM_DECL();
 
     if (comm_size == 1) {
@@ -37,8 +34,6 @@ int MPIR_Gather_intra_bine(const void *sendbuf, MPI_Aint sendcount,
     if ((rank == root && recvcount == 0) || (rank != root && sendcount == 0)) {
         goto fn_exit;
     }
-
-    /* MPIR_Assert(sendcount == recvcount && sendtype == recvtype); */
 
     MPIR_COMM_RANK_SIZE(comm_ptr, rank, comm_size);
 
@@ -57,15 +52,19 @@ int MPIR_Gather_intra_bine(const void *sendbuf, MPI_Aint sendcount,
     tmp_buf_size = comm_size * nbytes;
 
     /* For root, we don't need any temporary buffer */
-    if (rank == root)
+    if (rank == root) {
         tmp_buf_size = 0;
+    }
 
     if (tmp_buf_size) {
         MPIR_CHKLMEM_MALLOC(tmp_buf, tmp_buf_size);
     }
 
+    /* MPII_Bine_mod computes math modulo rather than reminder */
+    vrank = MPII_Bine_mod(rank - root, comm_size);
+
     if (rank == root) {
-        if (sendbuf !=  MPI_IN_PLACE) {
+        if (sendbuf != MPI_IN_PLACE) {
             mpi_errno = MPIR_Localcopy(sendbuf, sendcount, sendtype,
                                        ((char *) recvbuf + extent * recvcount * rank),
                                        recvcount, recvtype);
@@ -74,34 +73,16 @@ int MPIR_Gather_intra_bine(const void *sendbuf, MPI_Aint sendcount,
     } else {
         /* copy from sendbuf into tmp_buf */
         mpi_errno =
-            MPIR_Localcopy(sendbuf, sendcount, sendtype, tmp_buf, nbytes, MPIR_BYTE_INTERNAL);
-        MPIR_ERR_CHECK(mpi_errno); 
-    }
-
-    /* tmp_recv points to the beginning of the receive buffer
-     * tmp_size is the size of a single element in the receive buffer 
-     * tmp_type is the type of a single element in the receive buffer 
-     * tmp_count is the number of elements in the receive buffer 
-     */
-    if (rank == root) {
-        tmp_recv = (char *) recvbuf;
-        tmp_size = extent;
-        tmp_type = recvtype;
-        tmp_count = recvcount;
-    } else {
-        tmp_recv = (char *) tmp_buf;
-        tmp_size = sendtype_size;
-        tmp_type = sendtype;
-        tmp_count = sendcount;
+            MPIR_Localcopy(sendbuf, sendcount, sendtype, 
+                        (char *) tmp_buf + nbytes * rank, nbytes, MPIR_BYTE_INTERNAL);
+        MPIR_ERR_CHECK(mpi_errno);
     }
 
     /* I have the blocks in range [min_block_resident, max_block_resident] */
     min_block_resident = rank;
     max_block_resident = rank;
-    /* MPII_Bine_mod computes math modulo rather than reminder */
-    vrank = MPII_Bine_mod_pof2(rank - root, comm_size);
     extension_direction = 1; /* Down */
-    if (rank % 2) {
+    if (vrank % 2) {
         extension_direction = -1; /* Up */
     }
     mask = 0x1;
@@ -118,19 +99,22 @@ int MPIR_Gather_intra_bine(const void *sendbuf, MPI_Aint sendcount,
         if (!equal_lsbs || ((mask << 1) >= comm_size && (rank != root))) {
             if (max_block_resident >= min_block_resident) {
                 /* Single send */
-                mpi_errno = MPIC_Send((char *)tmp_buf + min_block_resident * tmp_count * tmp_size,
-                                      tmp_count * (max_block_resident - min_block_resident + 1),
-                                      tmp_type, partner, MPIR_GATHER_TAG, comm_ptr, coll_attr);
+                mpi_errno = MPIC_Send((char *)tmp_buf + min_block_resident * nbytes,
+                                      nbytes * (max_block_resident - min_block_resident + 1),
+                                      MPIR_BYTE_INTERNAL, partner, MPIR_GATHER_TAG,
+                                      comm_ptr, coll_attr);
                 MPIR_ERR_CHECK(mpi_errno);
             } else {
                 /* Wrapped send */
-                mpi_errno = MPIC_Send((char *)tmp_buf + min_block_resident * tmp_count * tmp_size,
-                                      tmp_count * ((comm_size - 1) - min_block_resident + 1),
-                                      tmp_type, partner, MPIR_GATHER_TAG, comm_ptr, coll_attr);
+                mpi_errno = MPIC_Send((char *)tmp_buf + min_block_resident * nbytes,
+                                      nbytes * ((comm_size - 1) - min_block_resident + 1),
+                                      MPIR_BYTE_INTERNAL, partner, MPIR_GATHER_TAG,
+                                      comm_ptr, coll_attr);
                 MPIR_ERR_CHECK(mpi_errno);
 
-                mpi_errno = MPIC_Send((char *)tmp_buf, tmp_count * (max_block_resident + 1),
-                                      tmp_type, partner, MPIR_GATHER_TAG, comm_ptr, coll_attr);
+                mpi_errno = MPIC_Send((char *)tmp_buf, nbytes * (max_block_resident + 1),
+                                      MPIR_BYTE_INTERNAL, partner, MPIR_GATHER_TAG,
+                                      comm_ptr, coll_attr);
                 MPIR_ERR_CHECK(mpi_errno);
             }
             break;
@@ -143,29 +127,47 @@ int MPIR_Gather_intra_bine(const void *sendbuf, MPI_Aint sendcount,
                 max_block_resident = recv_end;
             } else {
                 recv_end = MPII_Bine_mod(min_block_resident - 1, comm_size);
-                recv_start =
-                    MPII_Bine_mod(min_block_resident - mask, comm_size);
+                recv_start = MPII_Bine_mod(min_block_resident - mask, comm_size);
                 min_block_resident = recv_start;
             }
+
             if (recv_end >= recv_start) {
                 /* Single recv */
-                mpi_errno =
-                    MPIC_Recv(tmp_recv + recv_start * tmp_count * tmp_size,
-                              tmp_count * (recv_end - recv_start + 1), tmp_type,
-                              partner, MPIR_GATHER_TAG, comm_ptr, MPI_STATUS_IGNORE);
-                MPIR_ERR_CHECK(mpi_errno);
+                if (rank == root) {
+                    mpi_errno =
+                        MPIC_Recv((char *)recvbuf + recv_start * recvcount * extent,
+                                recvcount * (recv_end - recv_start + 1), recvtype,
+                                partner, MPIR_GATHER_TAG, comm_ptr, MPI_STATUS_IGNORE);
+                    MPIR_ERR_CHECK(mpi_errno);
+                } else {
+                    mpi_errno =
+                        MPIC_Recv((char *)tmp_buf + recv_start * nbytes,
+                                nbytes * (recv_end - recv_start + 1), MPIR_BYTE_INTERNAL,
+                                partner, MPIR_GATHER_TAG, comm_ptr, MPI_STATUS_IGNORE);
+                    MPIR_ERR_CHECK(mpi_errno);
+                }
             } else {
                 /* Wrapped recv */
-                mpi_errno = MPIC_Recv(tmp_recv + recv_start * tmp_count * tmp_size,
-                                      tmp_count * ((comm_size - 1) - recv_start + 1), tmp_type,
+                if (rank == root) {
+                    mpi_errno = MPIC_Recv((char *)recvbuf + recv_start * recvcount * extent,
+                                      recvcount * ((comm_size - 1) - recv_start + 1), recvtype,
                                       partner, MPIR_GATHER_TAG, comm_ptr, MPI_STATUS_IGNORE);
-                MPIR_ERR_CHECK(mpi_errno);
-                mpi_errno = MPIC_Recv(tmp_recv,
-                                      tmp_count * (recv_end + 1), tmp_type,
+                    MPIR_ERR_CHECK(mpi_errno);
+                    mpi_errno = MPIC_Recv(recvbuf,
+                                      recvcount * (recv_end + 1), recvtype,
                                       partner, MPIR_GATHER_TAG, comm_ptr, MPI_STATUS_IGNORE);
-                MPIR_ERR_CHECK(mpi_errno);
+                    MPIR_ERR_CHECK(mpi_errno); 
+                } else {
+                    mpi_errno = MPIC_Recv((char *)tmp_buf + recv_start * nbytes,
+                                          nbytes * ((comm_size - 1) - recv_start + 1),  MPIR_BYTE_INTERNAL,
+                                          partner, MPIR_GATHER_TAG, comm_ptr, MPI_STATUS_IGNORE);
+                    MPIR_ERR_CHECK(mpi_errno);
+                    mpi_errno = MPIC_Recv(tmp_buf,
+                                          nbytes * (recv_end + 1), MPIR_BYTE_INTERNAL,
+                                          partner, MPIR_GATHER_TAG, comm_ptr, MPI_STATUS_IGNORE);
+                    MPIR_ERR_CHECK(mpi_errno);
+                }
             }
-
             extension_direction *= -1;
         }
         mask <<= 1;

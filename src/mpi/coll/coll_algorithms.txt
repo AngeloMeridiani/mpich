@@ -79,6 +79,7 @@ bcast-intra:
         cvar_params: TREE_TYPE, TREE_KVAL, IS_NON_BLOCKING, TREE_PIPELINE_CHUNK_SIZE, RECV_PRE_POST 
     bine_lat
     bine_bdw
+        restrictions: power-of-two
 
 ibcast-intra:
     sched_binomial
@@ -109,6 +110,7 @@ ibcast-inter:
 gather-intra:
     binomial
     bine
+        restrictions: power-of-two
 gather-inter:
     linear
     local_gather_remote_send
@@ -141,6 +143,7 @@ igatherv-inter:
 scatter-intra:
     binomial
     bine
+        restrictions: power-of-two
 scatter-inter:
     linear
     remote_send_local_scatter
@@ -255,6 +258,7 @@ alltoall-intra:
     scattered
         restrictions: noinplace
     bine
+        restrictions: noinplace, power-of-two
 alltoall-inter:
     pairwise_exchange
 ialltoall-intra:
@@ -329,7 +333,9 @@ reduce-intra:
     reduce_scatter_gather
         restrictions: size-ge-pof2, builtin-op
     bine_lat
+        restrictions: commutative
     bine_bdw
+        restrictions: commutative
 reduce-inter:
     local_reduce_remote_send
 ireduce-intra:
@@ -375,7 +381,11 @@ allreduce-intra:
         extra_params: ccl
         cvar_params: CCL
     bine_lat
+        restrictions: commutative
     bine_bdw
+        restrictions: commutative
+        extra_params: chunk_size
+        cvar_params: TREE_PIPELINE_CHUNK_SIZE
 allreduce-inter:
     reduce_exchange_bcast
 iallreduce-intra:
@@ -415,7 +425,7 @@ reduce_scatter-intra:
     bine
         extra_params: bine_type
         cvar_params: BINE_TYPE
-        restrictions: commutative
+        restrictions: commutative, power-of-two
 reduce_scatter-inter:
     remote_reduce_local_scatter
 ireduce_scatter-intra:

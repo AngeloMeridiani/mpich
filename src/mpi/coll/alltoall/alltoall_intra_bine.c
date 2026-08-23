@@ -13,33 +13,44 @@ int MPIR_Alltoall_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Dataty
     int rank, comm_size, recvtype_sz, mpi_errno = MPI_SUCCESS;
     int inverse_mask, mask = 0x1, block_first_mask;
     int partner, ntbn, rotated_i, repr, index;
-    MPI_Aint recvtype_extent, sendtype_extent;
+    MPI_Aint sendtype_extent, recvtype_extent;
     MPI_Aint i;
     MPI_Aint num_resident_blocks, num_resident_blocks_next, min_block_s,
-        max_block_s;
+             max_block_s;
     MPI_Aint block_recvd_cnt, block_send_cnt, offset_keep, offset_send;
     MPI_Aint block, remap_block, offset, offset_src, offset_dst;
     MPI_Aint sbuf_size, tmpbuf_size, tmpbuf_size_real;
     char *tmpbuf = NULL;
     MPI_Aint *resident_block, *resident_block_next;
     /* resident_block[i] contains the id of a block that is resident in the
-     * current rank (for i < num_resident_blocks) 
-     * resident_block_next[i] contains the id of a block that is resident in 
+     * current rank (for i < num_resident_blocks)
+     * resident_block_next[i] contains the id of a block that is resident in
      * the current rank in the next step (for i < num_resident_blocks_next)
      */
     MPIR_CHKLMEM_DECL();
 
     MPIR_COMM_RANK_SIZE(comm_ptr, rank, comm_size);
 
+#ifdef HAVE_ERROR_CHECKING
+    MPIR_Assert(sendbuf != MPI_IN_PLACE);
+#endif /* HAVE_ERROR_CHECKING */
+
+    /* Special case for comm_size == 1 */
+    if (comm_size == 1) {
+        mpi_errno = MPIR_Localcopy(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype);
+        MPIR_ERR_CHECK(mpi_errno);
+        goto fn_exit;
+    }
+
     /* Get extent of send and recv types */
     MPIR_Datatype_get_extent_macro(recvtype, recvtype_extent);
     MPIR_Datatype_get_extent_macro(sendtype, sendtype_extent);
 
-    /* allocate temporary buffer */
-    MPIR_Datatype_get_size_macro(recvtype, recvtype_sz);
-
     num_resident_blocks = comm_size;
     num_resident_blocks_next = 0;
+
+    /* allocate temporary buffer */
+    MPIR_Datatype_get_size_macro(recvtype, recvtype_sz);
     sbuf_size = recvcount * recvtype_sz;
     tmpbuf_size = sbuf_size * comm_size;
     tmpbuf_size_real = tmpbuf_size + sizeof(MPI_Aint) * comm_size + sizeof(MPI_Aint) * comm_size;
@@ -52,13 +63,13 @@ int MPIR_Alltoall_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Dataty
     for (i = 0; i < comm_size; i++) {
         resident_block[i] = i;
     }
-    
+
     mpi_errno = MPIR_Localcopy(sendbuf, sendcount * comm_size, sendtype,
                                tmpbuf, tmpbuf_size, MPIR_BYTE_INTERNAL);
     MPIR_ERR_CHECK(mpi_errno);
 
     /* We use recvbuf to receive/send the data, and tmpbuf to organize the data
-     * to send at the next step By doing so, we avoid a copy form tmpbuf to
+     * to send at the next step. By doing so, we avoid a copy from tmpbuf to
      * recvbuf at the end
      */
     inverse_mask = 0x1 << (int)(MPL_log2(comm_size) - 1);
@@ -87,13 +98,14 @@ int MPIR_Alltoall_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Dataty
             /* and I move to recvbuf the blocks I want to send. */
             if (remap_block >= min_block_s && remap_block <= max_block_s) {
                 mpi_errno = MPIR_Localcopy(tmpbuf + offset, sbuf_size, MPIR_BYTE_INTERNAL,
-                                           (char *)recvbuf + offset_send, recvcount, recvtype);
+                                           (char *)recvbuf + offset_send, sbuf_size,
+                                           MPIR_BYTE_INTERNAL);
                 MPIR_ERR_CHECK(mpi_errno);
                 offset_send += sbuf_size;
                 block_send_cnt++;
             } else {
                 /* Copy the blocks we are not sending to the second half of
-                 * recvbuf 
+                 * recvbuf
                  */
                 if (offset != offset_keep) {
                     mpi_errno = MPIR_Localcopy(tmpbuf + offset, sbuf_size, MPIR_BYTE_INTERNAL,
@@ -107,19 +119,22 @@ int MPIR_Alltoall_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Dataty
                 num_resident_blocks_next++;
             }
         }
-        num_resident_blocks /= 2;
+        num_resident_blocks >>= 1;
 
         /* I receive data in the second half of tmpbuf (the first half contains */
         /* the blocks I am keeping from previous iteration) */
-        mpi_errno = MPIC_Sendrecv((char *)recvbuf, recvcount * block_send_cnt, recvtype,
-                           partner, MPIR_ALLTOALL_TAG, tmpbuf + (comm_size / 2) * sbuf_size,
-                           recvcount * recvtype_extent * block_send_cnt, recvtype, partner, MPIR_ALLTOALL_TAG, comm_ptr,
-                           MPI_STATUS_IGNORE, coll_attr);
+        mpi_errno = MPIC_Sendrecv((char *)recvbuf, sbuf_size * block_send_cnt,
+                                  MPIR_BYTE_INTERNAL, partner, MPIR_ALLTOALL_TAG,
+                                  tmpbuf + (comm_size / 2) * sbuf_size,
+                                  sbuf_size * block_send_cnt, MPIR_BYTE_INTERNAL,
+                                  partner, MPIR_ALLTOALL_TAG, comm_ptr,
+                                  MPI_STATUS_IGNORE, coll_attr);
         MPIR_ERR_CHECK(mpi_errno);
 
         /* Update resident blocks */
-        mpi_errno = MPIR_Localcopy(resident_block_next, num_resident_blocks * sizeof(MPI_Aint), MPIR_BYTE_INTERNAL,
-                                   resident_block, num_resident_blocks * sizeof(MPI_Aint), MPIR_BYTE_INTERNAL);
+        mpi_errno = MPIR_Localcopy(resident_block_next, num_resident_blocks * sizeof(MPI_Aint),
+                                   MPIR_BYTE_INTERNAL, resident_block,
+                                   num_resident_blocks * sizeof(MPI_Aint), MPIR_BYTE_INTERNAL);
         MPIR_ERR_CHECK(mpi_errno);
 
         mask <<= 1;
@@ -150,9 +165,9 @@ int MPIR_Alltoall_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Dataty
         index = MPII_Bine_remap_distance_doubling(repr);
 
         offset_src = index * sbuf_size;
-        offset_dst = i * sbuf_size;
+        offset_dst = i * recvcount * recvtype_extent;
         mpi_errno = MPIR_Localcopy(tmpbuf + offset_src, sbuf_size, MPIR_BYTE_INTERNAL,
-                                   (char *)recvbuf + offset_dst * recvtype_extent, recvcount, recvtype);
+                                   (char *)recvbuf + offset_dst, recvcount, recvtype);
         MPIR_ERR_CHECK(mpi_errno);
     }
 

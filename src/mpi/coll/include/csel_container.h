@@ -419,6 +419,9 @@ typedef struct {
             struct {
                 int ccl;
             } intra_ccl;
+            struct {
+                int chunk_size;
+            } intra_bine_bdw;
         } allreduce;
         struct {
             struct {
