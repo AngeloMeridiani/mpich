@@ -357,7 +357,8 @@ algorithms:
             composition:2
             composition:3
             binomial
-            bine
+            bine_lat
+            bine_bdw
             smp
             scatter_recursive_doubling_allgather
             scatter_ring_allgather
