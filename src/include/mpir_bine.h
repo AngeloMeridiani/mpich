@@ -9,28 +9,19 @@
 #define BINE_MAX_STEPS 20
 
 #include "mpiimpl.h"
-#include <assert.h>
-#include <errno.h>
-#include <limits.h>
-#include <mpi.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
-static int rhos[BINE_MAX_STEPS] = {
+static const int rhos[BINE_MAX_STEPS] = {
     1,   -1,    3,    -5,    11,    -21,    43,    -85,    171,    -341,
     683, -1365, 2731, -5461, 10923, -21845, 43691, -87381, 174763, -349525};
 
-static int smallest_negabinary[BINE_MAX_STEPS] = {
+static const int smallest_negabinary[BINE_MAX_STEPS] = {
     0,    0,    -2,    -2,    -10,    -10,    -42,    -42,    -170,    -170,
     -682, -682, -2730, -2730, -10922, -10922, -43690, -43690, -174762, -174762};
-static int largest_negabinary[BINE_MAX_STEPS] = {
+static const int largest_negabinary[BINE_MAX_STEPS] = {
     0,   1,    1,    5,    5,    21,    21,    85,    85,    341,
     341, 1365, 1365, 5461, 5461, 21845, 21845, 87381, 87381, 349525};
 
-static inline int MPII_Bine_mod(int a, int b) 
+static inline int MPII_Bine_mod(int a, int b)
 {
 #ifdef MPL_HAVE_BUILTIN_POPCOUNT
     if (MPL_is_pof2(b)) {
@@ -71,7 +62,7 @@ static inline int MPII_Bine_pi(int rank, int step, int comm_sz) {
 
 static inline void MPII_Bine_get_permutation_aux(int rank, int step, const int n_steps,
                                                  const int adj_size, int *bitmap,
-                                                 int offset) 
+                                                 int offset)
 {
     *(bitmap + rank) = offset;
     if (step >= n_steps)
@@ -88,7 +79,7 @@ static inline void MPII_Bine_get_permutation_aux(int rank, int step, const int n
 
 static inline void MPII_Bine_get_permutation(int rank, int step, const int n_steps,
                                    const int adj_size, int *bitmap,
-                                   int offset) 
+                                   int offset)
 {
     if (step >= n_steps)
         return;
@@ -98,7 +89,7 @@ static inline void MPII_Bine_get_permutation(int rank, int step, const int n_ste
 }
 
 static inline void MPII_Bine_get_indexes_aux(int rank, int step, const int n_steps,
-                                             const int adj_size, int *bitmap) 
+                                             const int adj_size, int *bitmap)
 {
     if (step >= n_steps)
         return;
@@ -113,7 +104,7 @@ static inline void MPII_Bine_get_indexes_aux(int rank, int step, const int n_ste
 }
 
 static inline void MPII_Bine_get_indexes(int rank, int step, const int n_steps,
-                                         const int adj_size, int *bitmap) 
+                                         const int adj_size, int *bitmap)
 {
     if (step >= n_steps)
         return;
@@ -131,10 +122,10 @@ static inline void MPII_Bine_get_indexes(int rank, int step, const int n_steps,
  *
  * @returns The log_2 of value or -1 for negative value and 0.
  */
-static inline int MPII_Bine_log2(int value) 
+static inline int MPII_Bine_log2(int value)
 {
     if (unlikely(value <= 0)) {
-        return -1; 
+        return -1;
     }
     int log = MPL_log2(value);
     if (!MPL_is_pof2(value)) {
@@ -142,22 +133,6 @@ static inline int MPII_Bine_log2(int value)
     }
     return log;
 }
-
-/*
- * mirror_perm: Returns mirror permutation of nbits low-order bits
- *                   of x [*].
- * [*] Warren Jr., Henry S. Hacker's Delight (2ed). 2013.
- *     Chapter 7. Rearranging Bits and Bytes.
- */
-/*static inline unsigned int MPII_Bine_mirror_perm(unsigned int x, int nbits) 
-{
-    x = (((x & 0xaaaaaaaa) >> 1) | ((x & 0x55555555) << 1));
-    x = (((x & 0xcccccccc) >> 2) | ((x & 0x33333333) << 2));
-    x = (((x & 0xf0f0f0f0) >> 4) | ((x & 0x0f0f0f0f) << 4));
-    x = (((x & 0xff00ff00) >> 8) | ((x & 0x00ff00ff) << 8));
-    x = ((x >> 16) | (x << 16));
-    return x >> (sizeof(x) * CHAR_BIT - nbits);
-}*/
 
 /**
  * Calculates the highest bit in an integer
@@ -174,7 +149,7 @@ static inline int MPII_Bine_log2(int value)
  * WARNING: *NO* error checking is performed.  This is meant to be a
  * fast inline function.
  */
-static inline int MPII_Bine_hibit(int value, int start) 
+static inline int MPII_Bine_hibit(int value, int start)
 {
     unsigned int mask;
 
@@ -200,7 +175,7 @@ static inline int MPII_Bine_hibit(int value, int start)
  */
 static inline int MPII_Bine_reorder_blocks(void *buffer, MPI_Aint block_size,
                                            MPI_Datatype dtype, int *block_permutation,
-                                           int num_blocks) 
+                                           int num_blocks)
 {
     int mpi_errno = MPI_SUCCESS;
     MPI_Aint extent;
@@ -209,7 +184,7 @@ static inline int MPII_Bine_reorder_blocks(void *buffer, MPI_Aint block_size,
     void *temp = NULL;
 
     MPIR_CHKLMEM_DECL();
-    
+
     MPIR_ERR_CHKANDJUMP(unlikely(buffer == NULL || block_permutation == NULL ||
                         num_blocks <= 0), mpi_errno, MPI_ERR_ARG, "**arg");
 
@@ -258,13 +233,13 @@ static inline int MPII_Bine_reorder_blocks(void *buffer, MPI_Aint block_size,
  * rounddown: Rounds a number down to nearest multiple.
  *     rounddown(10,4) = 8, rounddown(6,3) = 6, rounddown(14,3) = 12
  */
-static inline int MPII_Bine_rounddown(int num, int factor) 
+static inline int MPII_Bine_rounddown(int num, int factor)
 {
     num /= factor;
     return num * factor; /* floor(num / factor) * factor */
 }
 
-static inline uint32_t MPII_Bine_binary_to_negabinary(int32_t bin) 
+static inline uint32_t MPII_Bine_binary_to_negabinary(int32_t bin)
 {
     if (unlikely(bin > 0x55555555))
         return -1;
@@ -272,13 +247,13 @@ static inline uint32_t MPII_Bine_binary_to_negabinary(int32_t bin)
     return (mask + bin) ^ mask;
 }
 
-static inline int32_t MPII_Bine_negabinary_to_binary(uint32_t neg) 
+static inline int32_t MPII_Bine_negabinary_to_binary(uint32_t neg)
 {
     const uint32_t mask = 0xAAAAAAAA;
     return (mask ^ neg) - mask;
 }
 
-static inline int MPII_Bine_in_range(int x, uint32_t nbits) 
+static inline int MPII_Bine_in_range(int x, uint32_t nbits)
 {
     return x >= smallest_negabinary[nbits] && x <= largest_negabinary[nbits];
 }
@@ -293,7 +268,7 @@ static inline uint32_t MPII_Bine_reverse(uint32_t x) {
 }
 
 static inline uint32_t MPII_Bine_get_rank_negabinary_representation(int num_ranks,
-                                                                    int rank) 
+                                                                    int rank)
 {
 
     uint32_t nba = UINT32_MAX, nbb = UINT32_MAX;
@@ -326,7 +301,7 @@ static inline uint32_t MPII_Bine_get_rank_negabinary_representation(int num_rank
     } else if (nba != UINT32_MAX && nbb == UINT32_MAX) {
         return nba;
     } else { /* Check MSB */
-        if (nba & (80000000 >> (32 - num_bits))) {
+        if (nba & (0x80000000 >> (32 - num_bits))) {
             return nba;
         } else {
             return nbb;
@@ -334,7 +309,7 @@ static inline uint32_t MPII_Bine_get_rank_negabinary_representation(int num_rank
     }
 }
 
-static inline int MPII_Bine_remap_rank(int num_ranks, int rank) 
+static inline int MPII_Bine_remap_rank(int num_ranks, int rank)
 {
     if (num_ranks == 1) return 0;
     uint32_t remap_rank = MPII_Bine_get_rank_negabinary_representation(num_ranks, rank);
@@ -344,15 +319,8 @@ static inline int MPII_Bine_remap_rank(int num_ranks, int rank)
     return remap_rank;
 }
 
-/*static inline int MPII_Bine_inverse_rank(int num_ranks, int rank) 
-{
-    if (num_ranks == 1) return 0;
-    int num_bits = MPII_Bine_log2(num_ranks);
-    return MPII_Bine_reverse(rank) >> (32 - num_bits);
-}*/
-
 static inline int MPII_Bine_get_sender_aux(int num_ranks, int rank,
-                                           int root) 
+                                           int root)
 {
     int remap = MPII_Bine_remap_rank(num_ranks, rank);
 
@@ -362,19 +330,19 @@ static inline int MPII_Bine_get_sender_aux(int num_ranks, int rank,
         return MPII_Bine_get_sender_aux(num_ranks, remap, root);
 }
 
-static inline int MPII_Bine_get_sender_rec(int num_ranks, int rank) 
+static inline int MPII_Bine_get_sender_rec(int num_ranks, int rank)
 {
     return MPII_Bine_get_sender_aux(num_ranks, rank, rank);
 }
 
 /* Function to calculate a Mersenne number (2^n - 1) */
-static inline uint32_t mersenne(int n) 
-{ 
-    return (1UL << (n + 1)) - 1; 
+static inline uint32_t mersenne(int n)
+{
+    return (1UL << (n + 1)) - 1;
 }
- 
 
-static inline int MPII_Bine_remap_distance_doubling(uint32_t num) 
+
+static inline int MPII_Bine_remap_distance_doubling(uint32_t num)
 {
     int remapped = 0;
     while (num > 0) {
@@ -382,7 +350,7 @@ static inline int MPII_Bine_remap_distance_doubling(uint32_t num)
 /* TODO: Maybe this should be replaced by MPL_log2() */
 #ifdef MPL_HAVE_BUILTIN_CLZ
         k = 31 - __builtin_clz(num); /* Find the position of the highest set bit */
-#else 
+#else
         int n = num;
         while (n > 0) {
             n >>= 1;
@@ -395,12 +363,12 @@ static inline int MPII_Bine_remap_distance_doubling(uint32_t num)
     return remapped;
 }
 
-static inline uint32_t MPII_Bine_nb_to_nu(uint32_t nb, uint32_t size) 
+static inline uint32_t MPII_Bine_nb_to_nu(uint32_t nb, uint32_t size)
 {
     return MPII_Bine_reverse(nb ^ (nb >> 1)) >> (32 - MPII_Bine_log2(size));
 }
 
-static inline uint32_t MPII_Bine_get_nu(uint32_t rank, uint32_t size) 
+static inline uint32_t MPII_Bine_get_nu(uint32_t rank, uint32_t size)
 {
     uint32_t nba = UINT32_MAX, nbb = UINT32_MAX;
     MPI_Aint num_bits = MPII_Bine_log2(size);
