@@ -18,8 +18,8 @@ int MPIR_Allreduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
     MPI_Aint w_size;
     int vrank;
     char *tmp_send = NULL, *tmp_recv = NULL;
-    char *tmp_buf = NULL, *tmp_buf_raw = NULL;
-    MPI_Aint dtsize, true_lb = 0, extent, true_extent, buf_size;
+    char *tmp_buf = NULL;
+    MPI_Aint true_lb = 0, extent, true_extent;
 
     MPIR_CHKLMEM_DECL();
 
@@ -50,7 +50,6 @@ int MPIR_Allreduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
     extra_ranks = comm_size - adjsize;
     is_power_of_two = (comm_size & (comm_size - 1)) == 0;
 
-    MPIR_Datatype_get_size_macro(datatype, dtsize);
     MPIR_Datatype_get_extent_macro(datatype, extent);
     MPIR_Type_get_true_extent_impl(datatype, &true_lb, &true_extent);
 

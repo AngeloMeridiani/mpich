@@ -14,8 +14,8 @@ int MPIR_Allreduce_intra_bine_lat(const void *sendbuf, void *recvbuf,
     int steps, adjsize, extra_ranks, is_power_of_two;
     int new_rank, loop_flag = 0;
     int s, vdest, dest;
-    char *tmpsend = NULL, *tmprecv = NULL, *tmpbuf = NULL;
-    MPI_Aint extent, true_extent, lb, span = 0;
+    char *tmpbuf = NULL;
+    MPI_Aint extent, true_extent, lb;
 
     MPIR_CHKLMEM_DECL();
 
@@ -31,6 +31,16 @@ int MPIR_Allreduce_intra_bine_lat(const void *sendbuf, void *recvbuf,
         }
         MPIR_ERR_CHECK(mpi_errno);
         goto fn_exit;
+    }
+    /* Currently, the algorithm doesn't work with
+     * floating-point operations, causing mismatches
+     * if more than 7 processes are used.
+     */
+    int is_float;
+    MPIR_Datatype_is_float(datatype, is_float);
+    if (is_float) {
+        /* Fallback for floats to avoid mismatches */
+        return MPIR_Allreduce_allcomm_auto(sendbuf, recvbuf, count, datatype, op, comm_ptr, coll_attr);
     }
 
     /* Allocate and initialize temporary send buffer */
@@ -83,6 +93,9 @@ int MPIR_Allreduce_intra_bine_lat(const void *sendbuf, void *recvbuf,
                           MPIR_ALLREDUCE_TAG, comm_ptr, MPI_STATUS_IGNORE);
             MPIR_ERR_CHECK(mpi_errno);
 
+            /* do the reduction on received data. since the
+             * ordering is right, it doesn't matter whether
+             * the operation is commutative or not. */
             mpi_errno = MPIR_Reduce_local(tmpbuf, recvbuf, count, datatype, op);
             MPIR_ERR_CHECK(mpi_errno);
             new_rank = rank >> 1;
