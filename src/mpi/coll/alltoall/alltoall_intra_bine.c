@@ -149,7 +149,7 @@ int MPIR_Alltoall_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Dataty
      * consider the "reverse tree" (with this rank at the bottom and all the
      * other ranks on top), which represent how the data arrived here. This tree
      * is basically the opposite that I used to send the data I should consider
-     * the decreasing tree, and viceversa.
+     * the decreasing tree, and vice-versa.
      */
     for (i = 0; i < comm_size; i++) {
         if ((rank % 2) == 0) {
