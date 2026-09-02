@@ -22,6 +22,12 @@ int MPIR_Gather_intra_bine(const void *sendbuf, MPI_Aint sendcount,
     void *tmp_buf = NULL;
     MPIR_CHKLMEM_DECL();
 
+    MPIR_COMM_RANK_SIZE(comm_ptr, rank, comm_size);
+
+    if ((rank == root && recvcount == 0) || (rank != root && sendcount == 0)) {
+        goto fn_exit;
+    }
+
     if (comm_size == 1) {
         if (sendbuf != MPI_IN_PLACE) {
             mpi_errno = MPIR_Localcopy(sendbuf, sendcount, sendtype,
@@ -30,12 +36,6 @@ int MPIR_Gather_intra_bine(const void *sendbuf, MPI_Aint sendcount,
         }
         goto fn_exit;
     }
-
-    if ((rank == root && recvcount == 0) || (rank != root && sendcount == 0)) {
-        goto fn_exit;
-    }
-
-    MPIR_COMM_RANK_SIZE(comm_ptr, rank, comm_size);
 
     if (rank == root) {
         MPIR_Datatype_get_extent_macro(recvtype, extent);

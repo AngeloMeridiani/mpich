@@ -10,17 +10,16 @@ int MPIR_Reduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
                                MPI_Aint count, MPI_Datatype datatype, MPI_Op op,
                                int root, MPIR_Comm *comm_ptr, int coll_attr) {
 
-    int comm_size, rank, vrank, adjsize, dtsize, mpi_errno = MPI_SUCCESS, steps,
+    int comm_size, rank, vrank, adjsize, mpi_errno = MPI_SUCCESS, steps,
                                                  step;
-    int extra_ranks, new_rank, is_power_of_two, loop_flag;
+    int extra_ranks, new_rank, loop_flag;
     int count_per_rank, rem, mask = 0x1, inverse_mask;
     int block_first_mask, remapped_rank, receiving_mask;
     int *rindex = NULL, *sindex = NULL, *rcount = NULL, *scount = NULL;
     char *tmpbuf = NULL;
     int partner, abs_partner, nbtb;
     int send_block_first, send_block_last, recv_block_first, recv_block_last;
-    MPI_Aint true_lb, true_extent, extent;
-    MPI_Aint buf_size;
+    MPI_Aint true_lb = 0, true_extent = 0, extent = 0;
     MPIR_CHKLMEM_DECL();
 
     if (count == 0) {
@@ -156,13 +155,13 @@ int MPIR_Reduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
                 (recv_block_last < rem ? 1 : 0);
 
             mpi_errno = MPIC_Sendrecv(
-                recvbuf + sindex[step] * extent, scount[step], datatype,
-                abs_partner, MPIR_REDUCE_TAG, tmpbuf + rindex[step] * extent,
+                (char *)recvbuf + sindex[step] * extent, scount[step], datatype,
+                abs_partner, MPIR_REDUCE_TAG, (char *)tmpbuf + rindex[step] * extent,
                 rcount[step], datatype, abs_partner, MPIR_REDUCE_TAG, comm_ptr,
                 MPI_STATUS_IGNORE, coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
-            mpi_errno = MPIR_Reduce_local(tmpbuf + rindex[step] * extent,
-                                          recvbuf + rindex[step] * extent,
+            mpi_errno = MPIR_Reduce_local((char *)tmpbuf + rindex[step] * extent,
+                                          (char *)recvbuf + rindex[step] * extent,
                                           rcount[step], datatype, op);
             MPIR_ERR_CHECK(mpi_errno);
 
@@ -203,7 +202,7 @@ int MPIR_Reduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
              * the step) survives
              */
             if (inverse_mask & receiving_mask) {
-                mpi_errno = MPIC_Send(recvbuf + rindex[step] * extent,
+                mpi_errno = MPIC_Send((char *)recvbuf + rindex[step] * extent,
                                       rcount[step], datatype, abs_partner,
                                       MPIR_REDUCE_TAG, comm_ptr, coll_attr);
                 MPIR_ERR_CHECK(mpi_errno);
@@ -213,7 +212,7 @@ int MPIR_Reduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
                  * I receive my partner's block, but aligned to the power of two
                  */
                 mpi_errno = MPIC_Recv(
-                    recvbuf + sindex[step] * extent, scount[step], datatype,
+                    (char *)recvbuf + sindex[step] * extent, scount[step], datatype,
                     abs_partner, MPIR_REDUCE_TAG, comm_ptr, MPI_STATUS_IGNORE);
                 MPIR_ERR_CHECK(mpi_errno);
             }

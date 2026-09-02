@@ -19,7 +19,7 @@ int MPIR_Scatter_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Datatyp
     MPI_Aint min_resident_block, max_resident_block;
     MPI_Aint top_start, top_end, bottom_start, bottom_end;
     MPI_Aint send_start, send_end, recv_start, recv_end;
-    MPI_Aint stext;
+    MPI_Aint stext = 0;
     MPI_Aint num_blocks;
     char *tmp_buf = NULL, *sbuf = NULL, *rbuf = NULL;
 

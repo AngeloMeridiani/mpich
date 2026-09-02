@@ -13,7 +13,7 @@ int MPIR_Alltoall_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Dataty
     int rank, comm_size, recvtype_sz, mpi_errno = MPI_SUCCESS;
     int inverse_mask, mask = 0x1, block_first_mask;
     int partner, ntbn, rotated_i, repr, index;
-    MPI_Aint sendtype_extent, recvtype_extent;
+    MPI_Aint recvtype_extent;
     MPI_Aint i;
     MPI_Aint num_resident_blocks, num_resident_blocks_next, min_block_s,
              max_block_s;
@@ -44,7 +44,6 @@ int MPIR_Alltoall_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Dataty
 
     /* Get extent of send and recv types */
     MPIR_Datatype_get_extent_macro(recvtype, recvtype_extent);
-    MPIR_Datatype_get_extent_macro(sendtype, sendtype_extent);
 
     num_resident_blocks = comm_size;
     num_resident_blocks_next = 0;

@@ -399,7 +399,7 @@ static inline int MPIR_Allgather_intra_bine_two_blocks(const void *sendbuf, MPI_
 
     int rank, comm_size, steps, mpi_errno = MPI_SUCCESS, remote;
     int mask, my_first, recv_index, send_index, is_contig, nbytes, tmpcount;
-    int send_count, recv_count, extra_send, extra_recv, extra_tag;
+    int send_count, recv_count, extra_send, extra_recv;
     MPI_Aint rext, rsize, true_lb, true_extent;
     MPI_Aint tmpoffset;
     MPI_Datatype tmptype;

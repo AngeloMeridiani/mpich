@@ -16,11 +16,10 @@ int MPIR_Reduce_intra_bine_lat(const void *sendbuf, void *recvbuf,
                                int root, MPIR_Comm *comm_ptr, int coll_attr) {
 
     int comm_size, rank, vrank, mask, mpi_errno = MPI_SUCCESS;
-    int steps, adjsize, extra_ranks, is_power_of_two, loop_flag, new_rank;
+    int steps, adjsize, extra_ranks, loop_flag, new_rank;
     int partner, abs_partner, btnb_vrank, mask_lsbs, lsbs, equal_lsbs;
     MPI_Aint true_lb, true_extent, extent;
-    char *resbuf = NULL, *tmpbuf = NULL;
-    MPI_Aint buf_size;
+    char *tmpbuf = NULL;
     MPIR_CHKLMEM_DECL();
 
     if (count == 0) {
