@@ -659,6 +659,9 @@ def get_algo_extra_args(algo, kind):
                 if re.match(r"%sTREE_TYPE" % prefix, tmp):
                     newname = "MPIR_%s_tree_type" % func_name.capitalize()
                     tmp = re.sub(r"%sTREE_TYPE" % prefix, newname, tmp)
+                if re.match(r"%sBINE_TYPE" % prefix, tmp):
+                    newname = "MPIR_%s_bine_type" % func_name.capitalize()
+                    tmp = re.sub(r"%sBINE_TYPE" % prefix, newname, tmp)
                 elif re.match(r"%sTHROTTLE" % prefix, tmp):
                     newname = "MPIR_CVAR_ALLTOALL_THROTTLE"
                     tmp = re.sub(r"%sTHROTTLE" % prefix, newname, tmp)
