@@ -22,8 +22,7 @@
  * Cost = 2.lgp.alpha + 2.n.((p-1)/p).beta.
  */
 int MPIR_Bcast_intra_bine_bdw(void *buffer, MPI_Aint count,
-                              MPI_Datatype datatype, int root,
-                              MPIR_Comm *comm_ptr, int coll_attr)
+                              MPI_Datatype datatype, int root, MPIR_Comm * comm_ptr, int coll_attr)
 {
     int comm_size, rank, mpi_errno = MPI_SUCCESS, vrank;
     int mask, inverse_mask, block_first_mask, remapped_rank, receiving_mask;
@@ -129,8 +128,8 @@ int MPIR_Bcast_intra_bine_bdw(void *buffer, MPI_Aint count,
         if (recvd) {
             mpi_errno =
                 MPIC_Send((char *) tmp_buf + (MPI_Aint) displs[send_block_first],
-                         (MPI_Aint) send_count, MPIR_BYTE_INTERNAL, abs_partner,
-                         MPIR_BCAST_TAG, comm_ptr, coll_attr);
+                          (MPI_Aint) send_count, MPIR_BYTE_INTERNAL, abs_partner,
+                          MPIR_BCAST_TAG, comm_ptr, coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
         } else if (inverse_mask == receiving_mask || partner == 0) {
             mpi_errno =

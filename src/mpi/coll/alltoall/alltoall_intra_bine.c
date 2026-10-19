@@ -28,15 +28,15 @@
  */
 int MPIR_Alltoall_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Datatype sendtype,
                              void *recvbuf, MPI_Aint recvcount, MPI_Datatype recvtype,
-                             MPIR_Comm *comm_ptr, int coll_attr) {
+                             MPIR_Comm * comm_ptr, int coll_attr)
+{
 
     int rank, comm_size, recvtype_sz, mpi_errno = MPI_SUCCESS;
     int inverse_mask, mask = 0x1, block_first_mask;
     int partner, ntbn, rotated_i, repr, index;
     MPI_Aint recvtype_extent;
     MPI_Aint i;
-    MPI_Aint num_resident_blocks, num_resident_blocks_next, min_block_s,
-             max_block_s;
+    MPI_Aint num_resident_blocks, num_resident_blocks_next, min_block_s, max_block_s;
     MPI_Aint block_recvd_cnt, block_send_cnt, offset_keep, offset_send;
     MPI_Aint block, remap_block, offset, offset_src, offset_dst;
     MPI_Aint sbuf_size, tmpbuf_size, tmpbuf_size_real;
@@ -75,8 +75,8 @@ int MPIR_Alltoall_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Dataty
     tmpbuf_size_real = tmpbuf_size + sizeof(MPI_Aint) * comm_size + sizeof(MPI_Aint) * comm_size;
 
     MPIR_CHKLMEM_MALLOC(tmpbuf, tmpbuf_size_real);
-    resident_block = (MPI_Aint *)(tmpbuf + tmpbuf_size);
-    resident_block_next = (MPI_Aint *)(tmpbuf + tmpbuf_size + sizeof(MPI_Aint) * comm_size);
+    resident_block = (MPI_Aint *) (tmpbuf + tmpbuf_size);
+    resident_block_next = (MPI_Aint *) (tmpbuf + tmpbuf_size + sizeof(MPI_Aint) * comm_size);
 
     /* At the beginning I only have my blocks */
     for (i = 0; i < comm_size; i++) {
@@ -91,7 +91,7 @@ int MPIR_Alltoall_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Dataty
      * to send at the next step. By doing so, we avoid a copy from tmpbuf to
      * recvbuf at the end
      */
-    inverse_mask = 0x1 << (int)(MPL_log2(comm_size) - 1);
+    inverse_mask = 0x1 << (int) (MPL_log2(comm_size) - 1);
     block_first_mask = ~(inverse_mask - 1);
 
     while (mask < comm_size) {
@@ -117,7 +117,7 @@ int MPIR_Alltoall_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Dataty
             /* and I move to recvbuf the blocks I want to send. */
             if (remap_block >= min_block_s && remap_block <= max_block_s) {
                 mpi_errno = MPIR_Localcopy(tmpbuf + offset, sbuf_size, MPIR_BYTE_INTERNAL,
-                                           (char *)recvbuf + offset_send, sbuf_size,
+                                           (char *) recvbuf + offset_send, sbuf_size,
                                            MPIR_BYTE_INTERNAL);
                 MPIR_ERR_CHECK(mpi_errno);
                 offset_send += sbuf_size;
@@ -142,7 +142,7 @@ int MPIR_Alltoall_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Dataty
 
         /* I receive data in the second half of tmpbuf (the first half contains */
         /* the blocks I am keeping from previous iteration) */
-        mpi_errno = MPIC_Sendrecv((char *)recvbuf, sbuf_size * block_send_cnt,
+        mpi_errno = MPIC_Sendrecv((char *) recvbuf, sbuf_size * block_send_cnt,
                                   MPIR_BYTE_INTERNAL, partner, MPIR_ALLTOALL_TAG,
                                   tmpbuf + (comm_size / 2) * sbuf_size,
                                   sbuf_size * block_send_cnt, MPIR_BYTE_INTERNAL,
@@ -186,7 +186,7 @@ int MPIR_Alltoall_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Dataty
         offset_src = index * sbuf_size;
         offset_dst = i * recvcount * recvtype_extent;
         mpi_errno = MPIR_Localcopy(tmpbuf + offset_src, sbuf_size, MPIR_BYTE_INTERNAL,
-                                   (char *)recvbuf + offset_dst, recvcount, recvtype);
+                                   (char *) recvbuf + offset_dst, recvcount, recvtype);
         MPIR_ERR_CHECK(mpi_errno);
     }
 

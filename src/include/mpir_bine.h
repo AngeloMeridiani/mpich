@@ -11,15 +11,19 @@
 #include "mpiimpl.h"
 
 static const int rhos[BINE_MAX_STEPS] = {
-    1,   -1,    3,    -5,    11,    -21,    43,    -85,    171,    -341,
-    683, -1365, 2731, -5461, 10923, -21845, 43691, -87381, 174763, -349525};
+    1, -1, 3, -5, 11, -21, 43, -85, 171, -341,
+    683, -1365, 2731, -5461, 10923, -21845, 43691, -87381, 174763, -349525
+};
 
 static const int smallest_negabinary[BINE_MAX_STEPS] = {
-    0,    0,    -2,    -2,    -10,    -10,    -42,    -42,    -170,    -170,
-    -682, -682, -2730, -2730, -10922, -10922, -43690, -43690, -174762, -174762};
+    0, 0, -2, -2, -10, -10, -42, -42, -170, -170,
+    -682, -682, -2730, -2730, -10922, -10922, -43690, -43690, -174762, -174762
+};
+
 static const int largest_negabinary[BINE_MAX_STEPS] = {
-    0,   1,    1,    5,    5,    21,    21,    85,    85,    341,
-    341, 1365, 1365, 5461, 5461, 21845, 21845, 87381, 87381, 349525};
+    0, 1, 1, 5, 5, 21, 21, 85, 85, 341,
+    341, 1365, 1365, 5461, 5461, 21845, 21845, 87381, 87381, 349525
+};
 
 static inline int MPII_Bine_mod(int a, int b)
 {
@@ -51,21 +55,20 @@ static inline int MPII_Bine_pi(int rank, int step, int comm_sz)
     int dest;
 
     if ((rank & 1) == 0) {
-        dest = MPII_Bine_mod(rank + rhos[step], comm_sz); /* Even rank */
+        dest = MPII_Bine_mod(rank + rhos[step], comm_sz);       /* Even rank */
     } else {
-        dest = MPII_Bine_mod(rank - rhos[step], comm_sz); /* Odd rank */
+        dest = MPII_Bine_mod(rank - rhos[step], comm_sz);       /* Odd rank */
     }
 
     if (dest < 0) {
-        dest += comm_sz; /* Adjust for negative ranks */
+        dest += comm_sz;        /* Adjust for negative ranks */
     }
 
     return dest;
 }
 
 static inline void MPII_Bine_get_permutation_aux(int rank, int step, const int n_steps,
-                                                 const int adj_size, int *bitmap,
-                                                 int offset)
+                                                 const int adj_size, int *bitmap, int offset)
 {
     *(bitmap + rank) = offset;
     if (step >= n_steps)
@@ -81,8 +84,7 @@ static inline void MPII_Bine_get_permutation_aux(int rank, int step, const int n
 }
 
 static inline void MPII_Bine_get_permutation(int rank, int step, const int n_steps,
-                                             const int adj_size, int *bitmap,
-                                             int offset)
+                                             const int adj_size, int *bitmap, int offset)
 {
     if (step >= n_steps)
         return;
@@ -182,14 +184,14 @@ static inline int MPII_Bine_reorder_blocks(void *buffer, MPI_Aint block_size,
 {
     int mpi_errno = MPI_SUCCESS;
     MPI_Aint extent;
-    char *buf = (char *)buffer;
+    char *buf = (char *) buffer;
     char *visited = NULL;
     void *temp = NULL;
 
     MPIR_CHKLMEM_DECL();
 
     MPIR_ERR_CHKANDJUMP(unlikely(buffer == NULL || block_permutation == NULL ||
-                        num_blocks <= 0), mpi_errno, MPI_ERR_ARG, "**arg");
+                                 num_blocks <= 0), mpi_errno, MPI_ERR_ARG, "**arg");
 
     MPIR_Datatype_get_extent_macro(dtype, extent);
     MPIR_CHKLMEM_MALLOC(temp, block_size * extent);
@@ -213,8 +215,7 @@ static inline int MPII_Bine_reorder_blocks(void *buffer, MPI_Aint block_size,
         while (visited[block_permutation[current]] != 1) {
             int next = block_permutation[current];
             mpi_errno = MPIR_Localcopy(buf + next * block_size * extent, block_size, dtype,
-                                       buf + current * block_size * extent, block_size,
-                                       dtype);
+                                       buf + current * block_size * extent, block_size, dtype);
             MPIR_ERR_CHECK(mpi_errno);
             visited[current] = 1;
             current = next;
@@ -264,8 +265,7 @@ static inline uint32_t MPII_Bine_reverse(uint32_t x)
     return x;
 }
 
-static inline uint32_t MPII_Bine_get_rank_negabinary_representation(int num_ranks,
-                                                                    int rank)
+static inline uint32_t MPII_Bine_get_rank_negabinary_representation(int num_ranks, int rank)
 {
 
     uint32_t nba = UINT32_MAX, nbb = UINT32_MAX;
@@ -297,7 +297,7 @@ static inline uint32_t MPII_Bine_get_rank_negabinary_representation(int num_rank
         return nbb;
     } else if (nba != UINT32_MAX && nbb == UINT32_MAX) {
         return nba;
-    } else { /* Check MSB */
+    } else {    /* Check MSB */
         if (nba & (0x80000000 >> (32 - num_bits))) {
             return nba;
         } else {
@@ -308,7 +308,8 @@ static inline uint32_t MPII_Bine_get_rank_negabinary_representation(int num_rank
 
 static inline int MPII_Bine_remap_rank(int num_ranks, int rank)
 {
-    if (num_ranks == 1) return 0;
+    if (num_ranks == 1)
+        return 0;
     uint32_t remap_rank = MPII_Bine_get_rank_negabinary_representation(num_ranks, rank);
     remap_rank = remap_rank ^ (remap_rank >> 1);
     int num_bits = MPII_Bine_log2(num_ranks);
@@ -316,8 +317,7 @@ static inline int MPII_Bine_remap_rank(int num_ranks, int rank)
     return remap_rank;
 }
 
-static inline int MPII_Bine_get_sender_aux(int num_ranks, int rank,
-                                           int root)
+static inline int MPII_Bine_get_sender_aux(int num_ranks, int rank, int root)
 {
     int remap = MPII_Bine_remap_rank(num_ranks, rank);
 
@@ -346,7 +346,7 @@ static inline int MPII_Bine_remap_distance_doubling(uint32_t num)
         int k = -1;
 /* TODO: Maybe this should be replaced by MPL_log2() */
 #ifdef MPL_HAVE_BUILTIN_CLZ
-        k = 31 - __builtin_clz(num); /* Find the position of the highest set bit */
+        k = 31 - __builtin_clz(num);    /* Find the position of the highest set bit */
 #else
         int n = num;
         while (n > 0) {
@@ -354,8 +354,8 @@ static inline int MPII_Bine_remap_distance_doubling(uint32_t num)
             k++;
         }
 #endif
-        remapped ^= (0x1 << k);      /* Set the k-th bit in the remapped number */
-        num ^= MPII_Bine_mersenne(k); /* XOR the Mersenne number with the remaining number */
+        remapped ^= (0x1 << k); /* Set the k-th bit in the remapped number */
+        num ^= MPII_Bine_mersenne(k);   /* XOR the Mersenne number with the remaining number */
     }
     return remapped;
 }
@@ -390,7 +390,7 @@ static inline uint32_t MPII_Bine_get_nu(uint32_t rank, uint32_t size)
         return MPII_Bine_nb_to_nu(nbb, size);
     } else if (nba != UINT32_MAX && nbb == UINT32_MAX) {
         return MPII_Bine_nb_to_nu(nba, size);
-    } else { /* Check MSB */
+    } else {    /* Check MSB */
         int nu_a = MPII_Bine_nb_to_nu(nba, size);
         int nu_b = MPII_Bine_nb_to_nu(nbb, size);
         if (nu_a < nu_b) {
@@ -411,10 +411,10 @@ static inline unsigned int MPII_Bine_ffs(int x)
         return 0;
     }
     pos = 1;
-    unsigned int ux = (unsigned int)x;
-    while((ux & 1) == 0) {
+    unsigned int ux = (unsigned int) x;
+    while ((ux & 1) == 0) {
         pos++;
-        ux>>=1;
+        ux >>= 1;
     }
     return pos;
 #endif

@@ -21,10 +21,10 @@
  */
 int MPIR_Reduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
                                MPI_Aint count, MPI_Datatype datatype, MPI_Op op,
-                               int root, MPIR_Comm *comm_ptr, int coll_attr) {
+                               int root, MPIR_Comm * comm_ptr, int coll_attr)
+{
 
-    int comm_size, rank, vrank, adjsize, mpi_errno = MPI_SUCCESS, steps,
-                                                 step;
+    int comm_size, rank, vrank, adjsize, mpi_errno = MPI_SUCCESS, steps, step;
     int extra_ranks, new_rank, loop_flag;
     int count_per_rank, rem, mask = 0x1, inverse_mask;
     int block_first_mask, remapped_rank, receiving_mask;
@@ -43,8 +43,7 @@ int MPIR_Reduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
 
     if (comm_size == 1) {
         if (sendbuf != MPI_IN_PLACE) {
-            mpi_errno = MPIR_Localcopy(sendbuf, count, datatype, recvbuf, count,
-                                       datatype);
+            mpi_errno = MPIR_Localcopy(sendbuf, count, datatype, recvbuf, count, datatype);
             MPIR_ERR_CHECK(mpi_errno);
         }
         goto fn_exit;
@@ -58,9 +57,9 @@ int MPIR_Reduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
     /* Determine nearest power of two less than or equal to comm_size
      * and return an error if comm_size is 0
      */
-    steps = MPII_Bine_hibit(comm_size, (int)(sizeof(comm_size) * CHAR_BIT) - 1);
+    steps = MPII_Bine_hibit(comm_size, (int) (sizeof(comm_size) * CHAR_BIT) - 1);
     MPIR_ERR_CHKANDJUMP(steps == -1, mpi_errno, MPI_ERR_ARG, "**arg");
-    adjsize = 1 << steps; /* Largest power of two <= comm_size */
+    adjsize = 1 << steps;       /* Largest power of two <= comm_size */
 
     /* mod computes math modulo rather than reminder */
     vrank = MPII_Bine_mod(rank - root, comm_size);
@@ -69,7 +68,7 @@ int MPIR_Reduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
     rem = count % adjsize;
 
     MPIR_CHKLMEM_MALLOC(tmpbuf, count * (MPL_MAX(extent, true_extent)));
-    tmpbuf = (void *)((char *)tmpbuf - true_lb);
+    tmpbuf = (void *) ((char *) tmpbuf - true_lb);
 
     /* If I'm not the root, then my recvbuf may not be valid, therefore
      * I have to allocate a temporary one */
@@ -79,8 +78,7 @@ int MPIR_Reduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
     }
 
     if ((rank != root) || (sendbuf != MPI_IN_PLACE)) {
-        mpi_errno =
-            MPIR_Localcopy(sendbuf, count, datatype, recvbuf, count, datatype);
+        mpi_errno = MPIR_Localcopy(sendbuf, count, datatype, recvbuf, count, datatype);
         MPIR_ERR_CHECK(mpi_errno);
     }
 
@@ -111,8 +109,7 @@ int MPIR_Reduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
                                   MPII_Bine_mod((vrank + 1) + root, comm_size),
                                   MPIR_REDUCE_TAG, comm_ptr, MPI_STATUS_IGNORE);
             MPIR_ERR_CHECK(mpi_errno);
-            mpi_errno = MPIR_Reduce_local((char *)tmpbuf, (char *)recvbuf, count,
-                                          datatype, op);
+            mpi_errno = MPIR_Reduce_local((char *) tmpbuf, (char *) recvbuf, count, datatype, op);
             MPIR_ERR_CHECK(mpi_errno);
             new_rank = vrank >> 1;
         }
@@ -121,7 +118,7 @@ int MPIR_Reduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
     }
 
     mask = 0x1;
-    inverse_mask = 0x1 << (int)(MPL_log2(adjsize) - 1);
+    inverse_mask = 0x1 << (int) (MPL_log2(adjsize) - 1);
     block_first_mask = ~(inverse_mask - 1);
     remapped_rank = MPII_Bine_remap_rank(adjsize, new_rank);
 
@@ -140,41 +137,38 @@ int MPIR_Reduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
                 partner = MPII_Bine_mod(new_rank - nbtb, adjsize);
             }
             abs_partner = (partner < extra_ranks) ? (partner * 2)
-                                                  : (partner + extra_ranks);
+                : (partner + extra_ranks);
             /* Compute the absolute rank */
             abs_partner = MPII_Bine_mod(abs_partner + root, comm_size);
 
             /* Compute send block boundaries inline */
-            send_block_first =
-                MPII_Bine_remap_rank(adjsize, partner) & block_first_mask;
+            send_block_first = MPII_Bine_remap_rank(adjsize, partner) & block_first_mask;
             send_block_last = send_block_first + inverse_mask - 1;
             sindex[step] = count_per_rank * send_block_first +
-                           (send_block_first < rem ? send_block_first : rem);
+                (send_block_first < rem ? send_block_first : rem);
             scount[step] =
                 count_per_rank * (send_block_last - send_block_first + 1) +
                 (MPL_MIN(send_block_last, rem) -
-                 MPL_MIN(send_block_first, rem)) +
-                (send_block_last < rem ? 1 : 0);
+                 MPL_MIN(send_block_first, rem)) + (send_block_last < rem ? 1 : 0);
 
             /* Compute recv block boundaries inline */
             recv_block_first = remapped_rank & block_first_mask;
             recv_block_last = recv_block_first + inverse_mask - 1;
             rindex[step] = count_per_rank * recv_block_first +
-                           (recv_block_first < rem ? recv_block_first : rem);
+                (recv_block_first < rem ? recv_block_first : rem);
             rcount[step] =
                 count_per_rank * (recv_block_last - recv_block_first + 1) +
                 (MPL_MIN(recv_block_last, rem) -
-                 MPL_MIN(recv_block_first, rem)) +
-                (recv_block_last < rem ? 1 : 0);
+                 MPL_MIN(recv_block_first, rem)) + (recv_block_last < rem ? 1 : 0);
 
-            mpi_errno = MPIC_Sendrecv(
-                (char *)recvbuf + sindex[step] * extent, scount[step], datatype,
-                abs_partner, MPIR_REDUCE_TAG, (char *)tmpbuf + rindex[step] * extent,
-                rcount[step], datatype, abs_partner, MPIR_REDUCE_TAG, comm_ptr,
-                MPI_STATUS_IGNORE, coll_attr);
+            mpi_errno = MPIC_Sendrecv((char *) recvbuf + sindex[step] * extent, scount[step],
+                                      datatype, abs_partner, MPIR_REDUCE_TAG,
+                                      (char *) tmpbuf + rindex[step] * extent, rcount[step],
+                                      datatype, abs_partner, MPIR_REDUCE_TAG, comm_ptr,
+                                      MPI_STATUS_IGNORE, coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
-            mpi_errno = MPIR_Reduce_local((char *)tmpbuf + rindex[step] * extent,
-                                          (char *)recvbuf + rindex[step] * extent,
+            mpi_errno = MPIR_Reduce_local((char *) tmpbuf + rindex[step] * extent,
+                                          (char *) recvbuf + rindex[step] * extent,
                                           rcount[step], datatype, op);
             MPIR_ERR_CHECK(mpi_errno);
 
@@ -192,11 +186,9 @@ int MPIR_Reduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
          * right) of the first 1 in my remapped rank -- this indicates the step
          * when the data reaches me in a scatter
          */
-        receiving_mask = 0; /* Root never sends in gather */
+        receiving_mask = 0;     /* Root never sends in gather */
         if (rank != root) {
-            receiving_mask = 0x1
-                             << (MPII_Bine_ffs(remapped_rank) -
-                                 1); /* ffs starts counting from 1, thus -1 */
+            receiving_mask = 0x1 << (MPII_Bine_ffs(remapped_rank) - 1); /* ffs starts counting from 1, thus -1 */
         }
         step = steps - 1;
         while (mask > 0) {
@@ -207,7 +199,7 @@ int MPIR_Reduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
                 partner = MPII_Bine_mod(new_rank - nbtb, adjsize);
             }
             abs_partner = (partner < extra_ranks) ? (partner * 2)
-                                                  : (partner + extra_ranks);
+                : (partner + extra_ranks);
             /* Compute the absolute rank */
             abs_partner = MPII_Bine_mod(abs_partner + root, comm_size);
 
@@ -215,7 +207,7 @@ int MPIR_Reduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
              * the step) survives
              */
             if (inverse_mask & receiving_mask) {
-                mpi_errno = MPIC_Send((char *)recvbuf + rindex[step] * extent,
+                mpi_errno = MPIC_Send((char *) recvbuf + rindex[step] * extent,
                                       rcount[step], datatype, abs_partner,
                                       MPIR_REDUCE_TAG, comm_ptr, coll_attr);
                 MPIR_ERR_CHECK(mpi_errno);
@@ -224,9 +216,9 @@ int MPIR_Reduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
                 /* Something similar for the block to recv.
                  * I receive my partner's block, but aligned to the power of two
                  */
-                mpi_errno = MPIC_Recv(
-                    (char *)recvbuf + sindex[step] * extent, scount[step], datatype,
-                    abs_partner, MPIR_REDUCE_TAG, comm_ptr, MPI_STATUS_IGNORE);
+                mpi_errno = MPIC_Recv((char *) recvbuf + sindex[step] * extent, scount[step],
+                                      datatype, abs_partner, MPIR_REDUCE_TAG, comm_ptr,
+                                      MPI_STATUS_IGNORE);
                 MPIR_ERR_CHECK(mpi_errno);
             }
 

@@ -20,8 +20,8 @@
  */
 int MPIR_Allreduce_intra_bine_lat(const void *sendbuf, void *recvbuf,
                                   MPI_Aint count, MPI_Datatype datatype,
-                                  MPI_Op op, MPIR_Comm *comm_ptr,
-                                  int coll_attr) {
+                                  MPI_Op op, MPIR_Comm * comm_ptr, int coll_attr)
+{
     int rank, comm_size, mpi_errno = MPI_SUCCESS;
     int steps, adjsize, extra_ranks, is_power_of_two;
     int new_rank, loop_flag = 0;
@@ -38,8 +38,7 @@ int MPIR_Allreduce_intra_bine_lat(const void *sendbuf, void *recvbuf,
     /* Special case for comm_size == 1 */
     if (comm_size == 1) {
         if (sendbuf != MPI_IN_PLACE) {
-            mpi_errno = MPIR_Localcopy(sendbuf, count, datatype, recvbuf, count,
-                                       datatype);
+            mpi_errno = MPIR_Localcopy(sendbuf, count, datatype, recvbuf, count, datatype);
         }
         MPIR_ERR_CHECK(mpi_errno);
         goto fn_exit;
@@ -52,7 +51,8 @@ int MPIR_Allreduce_intra_bine_lat(const void *sendbuf, void *recvbuf,
     MPIR_Datatype_is_float(datatype, is_float);
     if (is_float) {
         /* Fallback for floats to avoid mismatches */
-        return MPIR_Allreduce_allcomm_auto(sendbuf, recvbuf, count, datatype, op, comm_ptr, coll_attr);
+        return MPIR_Allreduce_allcomm_auto(sendbuf, recvbuf, count, datatype, op, comm_ptr,
+                                           coll_attr);
     }
 
     /* Allocate and initialize temporary send buffer */
@@ -61,7 +61,7 @@ int MPIR_Allreduce_intra_bine_lat(const void *sendbuf, void *recvbuf,
 
     MPIR_CHKLMEM_MALLOC(tmpbuf, count * (MPL_MAX(extent, true_extent)));
     /* adjust for potential negative lower bound in datatype */
-    tmpbuf = (void *)((char *)tmpbuf - lb);
+    tmpbuf = (void *) ((char *) tmpbuf - lb);
 
     /* copy local data into recvbuf */
     if (sendbuf != MPI_IN_PLACE) {
@@ -72,10 +72,10 @@ int MPIR_Allreduce_intra_bine_lat(const void *sendbuf, void *recvbuf,
     /* Determine nearest power of two less than or equal to comm_size
      * and return an error if comm_size is 0
      */
-    steps = MPII_Bine_hibit(comm_size, (int)(sizeof(comm_size) * CHAR_BIT) - 1);
+    steps = MPII_Bine_hibit(comm_size, (int) (sizeof(comm_size) * CHAR_BIT) - 1);
     MPIR_ERR_CHKANDJUMP(steps == -1, mpi_errno, MPI_ERR_ARG, "**arg");
 
-    adjsize = 1 << steps; /* Largest power of two <= comm_size */
+    adjsize = 1 << steps;       /* Largest power of two <= comm_size */
 
     /* Number of nodes that exceed the largest power of two less than or equal
      * to comm_size
@@ -94,12 +94,12 @@ int MPIR_Allreduce_intra_bine_lat(const void *sendbuf, void *recvbuf,
     new_rank = rank;
     loop_flag = 0;
     if (rank < (2 * extra_ranks)) {
-        if ((rank % 2) == 0) { /* even */
+        if ((rank % 2) == 0) {  /* even */
             mpi_errno = MPIC_Send(recvbuf, count, datatype, (rank + 1),
                                   MPIR_ALLREDUCE_TAG, comm_ptr, coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
             loop_flag = 1;
-        } else { /* odd */
+        } else {        /* odd */
             mpi_errno =
                 MPIC_Recv(tmpbuf, count, datatype, (rank - 1),
                           MPIR_ALLREDUCE_TAG, comm_ptr, MPI_STATUS_IGNORE);
@@ -121,14 +121,13 @@ int MPIR_Allreduce_intra_bine_lat(const void *sendbuf, void *recvbuf,
         for (s = 0; s < steps; s++) {
             vdest = MPII_Bine_pi(new_rank, s, adjsize);
 
-            dest = is_power_of_two         ? vdest
-                : (vdest < extra_ranks) ? (vdest << 1) + 1
-                                        : vdest + extra_ranks;
+            dest = is_power_of_two ? vdest
+                : (vdest < extra_ranks) ? (vdest << 1) + 1 : vdest + extra_ranks;
 
             mpi_errno =
                 MPIC_Sendrecv(recvbuf, count, datatype, dest, MPIR_ALLREDUCE_TAG,
-                            tmpbuf, count, datatype, dest, MPIR_ALLREDUCE_TAG,
-                            comm_ptr, MPI_STATUS_IGNORE, coll_attr);
+                              tmpbuf, count, datatype, dest, MPIR_ALLREDUCE_TAG,
+                              comm_ptr, MPI_STATUS_IGNORE, coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
 
             mpi_errno = MPIR_Reduce_local(tmpbuf, recvbuf, count, datatype, op);
@@ -144,7 +143,7 @@ int MPIR_Allreduce_intra_bine_lat(const void *sendbuf, void *recvbuf,
             mpi_errno = MPIC_Send(recvbuf, count, datatype, (rank - 1),
                                   MPIR_ALLREDUCE_TAG, comm_ptr, coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
-        } else { /* even */
+        } else {        /* even */
             mpi_errno =
                 MPIC_Recv(recvbuf, count, datatype, (rank + 1),
                           MPIR_ALLREDUCE_TAG, comm_ptr, MPI_STATUS_IGNORE);

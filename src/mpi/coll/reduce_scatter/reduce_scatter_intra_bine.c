@@ -26,7 +26,7 @@
 static inline int MPIR_Reduce_scatter_intra_bine_permute(const void *sendbuf, void *recvbuf,
                                                          const MPI_Aint recvcounts[],
                                                          MPI_Datatype datatype, MPI_Op op,
-                                                         MPIR_Comm *comm_ptr, int coll_attr)
+                                                         MPIR_Comm * comm_ptr, int coll_attr)
 {
     int comm_size, rank, mpi_errno = MPI_SUCCESS;
     int mask, inverse_mask, block_first_mask, remapped_rank, partner;
@@ -171,7 +171,7 @@ static inline int MPIR_Reduce_scatter_intra_bine_permute(const void *sendbuf, vo
 static inline int MPIR_Reduce_scatter_intra_bine_send_remap(const void *sendbuf, void *recvbuf,
                                                             const MPI_Aint recvcounts[],
                                                             MPI_Datatype datatype, MPI_Op op,
-                                                            MPIR_Comm *comm_ptr, int coll_attr)
+                                                            MPIR_Comm * comm_ptr, int coll_attr)
 {
 
     int comm_size, rank, mpi_errno = MPI_SUCCESS;
@@ -314,7 +314,7 @@ static inline int MPIR_Reduce_scatter_intra_bine_send_remap(const void *sendbuf,
 static inline int MPIR_Reduce_scatter_intra_bine_block_by_block(const void *sendbuf, void *recvbuf,
                                                                 const MPI_Aint recvcounts[],
                                                                 MPI_Datatype datatype, MPI_Op op,
-                                                                MPIR_Comm *comm_ptr, int coll_attr)
+                                                                MPIR_Comm * comm_ptr, int coll_attr)
 {
     int comm_size, rank, mpi_errno = MPI_SUCCESS;
     int mask, inverse_mask, block_first_mask, remapped_rank, partner;
@@ -465,13 +465,10 @@ static inline int MPIR_Reduce_scatter_intra_bine_block_by_block(const void *send
 int MPIR_Reduce_scatter_intra_bine(const void *sendbuf, void *recvbuf,
                                    const MPI_Aint recvcounts[],
                                    MPI_Datatype datatype, MPI_Op op,
-                                   MPIR_Comm *comm_ptr, int bine_type, int coll_attr)
+                                   MPIR_Comm * comm_ptr, int bine_type, int coll_attr)
 {
     int mpi_errno = MPI_SUCCESS;
-    int is_commutative;
-
-    is_commutative = MPIR_Op_is_commutative(op);
-    MPIR_Assert(is_commutative);
+    MPIR_Assert(MPIR_Op_is_commutative(op));
 
     /* Here we use the CVAR MPIR_CVAR_REDUCE_SCATTER_BINE_TYPE to select the
      * correct algorithm. If an invalid value is given, then the

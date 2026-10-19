@@ -18,8 +18,7 @@
  * Cost = lgp.alpha + n.lgp.beta
  */
 int MPIR_Bcast_intra_bine_lat(void *buf, MPI_Aint count,
-                              MPI_Datatype datatype, int root,
-                              MPIR_Comm *comm_ptr, int coll_attr)
+                              MPI_Datatype datatype, int root, MPIR_Comm * comm_ptr, int coll_attr)
 {
     int comm_size, rank, mpi_errno = MPI_SUCCESS, btnb_vrank;
     int vrank, mask, recvd, req_count = 0, steps, pow2;
@@ -70,7 +69,7 @@ int MPIR_Bcast_intra_bine_lat(void *buf, MPI_Aint count,
 
     is_in_pow2 = (vrank < pow2);
 
-    while ( is_in_pow2 && (mask > 0) ) {
+    while (is_in_pow2 && (mask > 0)) {
         partner = btnb_vrank ^ ((mask << 1) - 1);
         partner = MPII_Bine_mod(MPII_Bine_negabinary_to_binary(partner), pow2);
         partner = MPII_Bine_mod(partner + root, comm_size);

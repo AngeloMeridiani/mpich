@@ -6,7 +6,7 @@
 #include "mpiimpl.h"
 #include "mpir_bine.h"
 
-/* Algortihm: BINE
+/* Algorithm: BINE
  *
  * Restrictions: power-of-two no. of processes
  *
@@ -30,7 +30,7 @@
  */
 int MPIR_Scatter_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Datatype sendtype,
                             void *recvbuf, MPI_Aint recvcount, MPI_Datatype recvtype,
-                            int root, MPIR_Comm *comm_ptr, int coll_attr)
+                            int root, MPIR_Comm * comm_ptr, int coll_attr)
 {
     int comm_size, rank, mpi_errno = MPI_SUCCESS;
     int halving_direction, mask, recvd = 0, is_leaf = 0;
@@ -56,8 +56,7 @@ int MPIR_Scatter_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Datatyp
     /* Special case for comm_size == 1 */
     if (comm_size == 1) {
         if (recvbuf != MPI_IN_PLACE) {
-            mpi_errno = MPIR_Localcopy(sendbuf, sendcount, sendtype,
-                                       recvbuf, recvcount, recvtype);
+            mpi_errno = MPIR_Localcopy(sendbuf, sendcount, sendtype, recvbuf, recvcount, recvtype);
             MPIR_ERR_CHECK(mpi_errno);
         }
         goto fn_exit;
@@ -261,8 +260,7 @@ int MPIR_Scatter_intra_bine(const void *sendbuf, MPI_Aint sendcount, MPI_Datatyp
     } else if (!is_leaf && (recvbuf != MPI_IN_PLACE)) {
         /* non-leaf nodes copy the data from tmp_buf to recvbuf if not MPI_IN_PLACE */
         mpi_errno = MPIR_Localcopy((char *) sbuf + sbuf_offset * nbytes, nbytes,
-                                   MPIR_BYTE_INTERNAL, (char *) recvbuf,
-                                   recvcount, recvtype);
+                                   MPIR_BYTE_INTERNAL, (char *) recvbuf, recvcount, recvtype);
         MPIR_ERR_CHECK(mpi_errno);
     }
 

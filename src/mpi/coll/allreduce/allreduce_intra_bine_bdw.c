@@ -20,8 +20,8 @@
  */
 int MPIR_Allreduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
                                   MPI_Aint count, MPI_Datatype datatype,
-                                  MPI_Op op, MPIR_Comm *comm_ptr,
-                                  int coll_attr) {
+                                  MPI_Op op, MPIR_Comm * comm_ptr, int coll_attr)
+{
     int comm_size, rank, dest, steps, step, mpi_errno = MPI_SUCCESS;
     int adjsize, extra_ranks, is_power_of_two;
     int new_rank, loop_flag = 0;
@@ -40,8 +40,7 @@ int MPIR_Allreduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
     /* Special case for comm_size == 1 */
     if (comm_size == 1) {
         if (sendbuf != MPI_IN_PLACE) {
-            mpi_errno = MPIR_Localcopy(sendbuf, count, datatype, recvbuf, count,
-                                       datatype);
+            mpi_errno = MPIR_Localcopy(sendbuf, count, datatype, recvbuf, count, datatype);
             MPIR_ERR_CHECK(mpi_errno);
         }
         goto fn_exit;
@@ -52,9 +51,9 @@ int MPIR_Allreduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
     /* Determine nearest power of two less than or equal to comm_size
      * and return an error if comm_size is 0
      */
-    steps = MPII_Bine_hibit(comm_size, (int)(sizeof(comm_size) * CHAR_BIT) - 1);
+    steps = MPII_Bine_hibit(comm_size, (int) (sizeof(comm_size) * CHAR_BIT) - 1);
     MPIR_ERR_CHKANDJUMP(steps == -1, mpi_errno, MPI_ERR_ARG, "**arg");
-    adjsize = 1 << steps; /* Largest power of two <= comm_size */
+    adjsize = 1 << steps;       /* Largest power of two <= comm_size */
 
     /* Number of nodes that exceed the largest power of two less than or equal
      * to comm_size
@@ -87,12 +86,12 @@ int MPIR_Allreduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
     new_rank = rank;
     loop_flag = 0;
     if (rank < (2 * extra_ranks)) {
-        if ((rank % 2) == 0) { /* even */
+        if ((rank % 2) == 0) {  /* even */
             mpi_errno = MPIC_Send(recvbuf, count, datatype, (rank + 1),
                                   MPIR_ALLREDUCE_TAG, comm_ptr, coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
             loop_flag = 1;
-        } else { /* odd */
+        } else {        /* odd */
             mpi_errno =
                 MPIC_Recv(tmp_buf, count, datatype, (rank - 1),
                           MPIR_ALLREDUCE_TAG, comm_ptr, MPI_STATUS_IGNORE);
@@ -122,9 +121,8 @@ int MPIR_Allreduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
         for (step = 0; step < steps; step++) {
             vdest = MPII_Bine_pi(new_rank, step, adjsize);
 
-            dest = is_power_of_two         ? vdest
-                   : (vdest < extra_ranks) ? (vdest << 1) + 1
-                                           : vdest + extra_ranks;
+            dest = is_power_of_two ? vdest
+                : (vdest < extra_ranks) ? (vdest << 1) + 1 : vdest + extra_ranks;
             /* TODO: dest or vdest as param? */
             vdest = MPII_Bine_remap_rank(adjsize, vdest);
 
@@ -138,18 +136,16 @@ int MPIR_Allreduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
                 r_index[step] = s_index[step] + s_count[step];
             }
 
-            tmp_send = (char *)recvbuf + s_index[step] * extent;
+            tmp_send = (char *) recvbuf + s_index[step] * extent;
 
-            mpi_errno = MPIC_Sendrecv(
-                tmp_send, s_count[step], datatype, dest, MPIR_ALLREDUCE_TAG,
-                tmp_buf, r_count[step], datatype, dest, MPIR_ALLREDUCE_TAG,
-                comm_ptr, MPI_STATUS_IGNORE, coll_attr);
+            mpi_errno = MPIC_Sendrecv(tmp_send, s_count[step], datatype, dest, MPIR_ALLREDUCE_TAG,
+                                      tmp_buf, r_count[step], datatype, dest, MPIR_ALLREDUCE_TAG,
+                                      comm_ptr, MPI_STATUS_IGNORE, coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
 
-            tmp_recv = (char *)recvbuf + r_index[step] * extent;
+            tmp_recv = (char *) recvbuf + r_index[step] * extent;
 
-            mpi_errno = MPIR_Reduce_local(tmp_buf, tmp_recv, r_count[step],
-                                          datatype, op);
+            mpi_errno = MPIR_Reduce_local(tmp_buf, tmp_recv, r_count[step], datatype, op);
             MPIR_ERR_CHECK(mpi_errno);
 
             if (step + 1 < steps) {
@@ -163,17 +159,15 @@ int MPIR_Allreduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
         for (step = steps - 1; step >= 0; step--) {
             vdest = MPII_Bine_pi(new_rank, step, adjsize);
 
-            dest = is_power_of_two         ? vdest
-                   : (vdest < extra_ranks) ? (vdest << 1) + 1
-                                           : vdest + extra_ranks;
+            dest = is_power_of_two ? vdest
+                : (vdest < extra_ranks) ? (vdest << 1) + 1 : vdest + extra_ranks;
 
-            tmp_send = (char *)recvbuf + r_index[step] * extent;
-            tmp_recv = (char *)recvbuf + s_index[step] * extent;
+            tmp_send = (char *) recvbuf + r_index[step] * extent;
+            tmp_recv = (char *) recvbuf + s_index[step] * extent;
 
-            mpi_errno = MPIC_Sendrecv(
-                tmp_send, r_count[step], datatype, dest, MPIR_ALLREDUCE_TAG,
-                tmp_recv, s_count[step], datatype, dest, MPIR_ALLREDUCE_TAG,
-                comm_ptr, MPI_STATUS_IGNORE, coll_attr);
+            mpi_errno = MPIC_Sendrecv(tmp_send, r_count[step], datatype, dest, MPIR_ALLREDUCE_TAG,
+                                      tmp_recv, s_count[step], datatype, dest, MPIR_ALLREDUCE_TAG,
+                                      comm_ptr, MPI_STATUS_IGNORE, coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
         }
     }
@@ -186,7 +180,7 @@ int MPIR_Allreduce_intra_bine_bdw(const void *sendbuf, void *recvbuf,
             mpi_errno = MPIC_Send(recvbuf, count, datatype, (rank - 1),
                                   MPIR_ALLREDUCE_TAG, comm_ptr, coll_attr);
             MPIR_ERR_CHECK(mpi_errno);
-        } else { /* even */
+        } else {        /* even */
             mpi_errno =
                 MPIC_Recv(recvbuf, count, datatype, (rank + 1),
                           MPIR_ALLREDUCE_TAG, comm_ptr, MPI_STATUS_IGNORE);
